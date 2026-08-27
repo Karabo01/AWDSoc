@@ -1,0 +1,13 @@
+# The build context is sent to the daemon before anything runs; on a small host
+# that is memory and time. None of this belongs in the runtime image.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+tests/
+.env
+.env.*
+!.env.example

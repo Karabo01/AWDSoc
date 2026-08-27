@@ -6,8 +6,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# curl only, for container health probes. No compiler: every dependency ships
+# a cp312 manylinux wheel, and build-essential cost 74 packages and ~350 MB to
+# compile nothing. If pip ever needs to build from source it names the package,
+# and that is the signal to reconsider - not a reason to ship a toolchain.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential curl \
+ && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./
