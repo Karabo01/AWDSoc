@@ -34,7 +34,13 @@ app = FastAPI(
 )
 
 # Served same-origin behind Traefik: /api here, everything else to web. No CORS.
+#
+# Health is mounted twice on purpose. At the root it is what Coolify's container
+# probe hits, which never goes through Traefik. Under /api it is what an operator
+# or the console's own overview can reach from outside - without this, Traefik
+# routes /healthz to the web container and returns the SPA instead of JSON.
 app.include_router(health_routes.router)
+app.include_router(health_routes.router, prefix="/api", include_in_schema=False)
 app.include_router(api_router)
 
 

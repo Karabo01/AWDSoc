@@ -70,8 +70,20 @@ def test_the_route_table_is_actually_populated():
     assert "/api/v1/auth/switch-tenant" in paths
 
 
-@pytest.mark.parametrize("path", ["/healthz", "/readyz"])
+@pytest.mark.parametrize("path", ["/healthz", "/readyz", "/api/healthz", "/api/readyz"])
 def test_health_endpoints_answer_without_a_token(path):
     response = client.get(path)
     # 503 when Postgres/Redis are down locally; never a 401 and never a crash.
     assert response.status_code in (200, 503)
+
+
+def test_health_is_reachable_through_the_api_path_prefix():
+    """Traefik routes /api to this service and everything else to the web
+    container, so a health endpoint only at the root is invisible from outside -
+    a browser asking for /healthz gets the SPA back."""
+    assert client.get("/api/healthz").json()["status"] in ("ok", "degraded")
+
+
+def test_the_root_health_path_survives_for_the_container_probe():
+    """Coolify probes the container directly, never through Traefik."""
+    assert "status" in client.get("/healthz").json()

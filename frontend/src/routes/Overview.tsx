@@ -26,7 +26,7 @@ export function Overview() {
   });
   const { data: health } = useQuery({
     queryKey: ["health"],
-    queryFn: () => rootGet<Health>("/healthz"),
+    queryFn: () => rootGet<Health>("/api/healthz"),
     refetchInterval: 30_000,
   });
 

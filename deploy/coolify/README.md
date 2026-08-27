@@ -88,11 +88,19 @@ deploy or TLS issuance fails and Traefik serves its default certificate.
 ## 2. Generate the two secrets once, and keep them
 
 ```bash
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-python -c "import base64,os; print(base64.b64encode(os.urandom(32)).decode())"
+openssl rand -hex 32      # JWT_SECRET
+openssl rand -base64 32   # ENCRYPTION_KEY
 ```
 
-The first is `JWT_SECRET`, the second `ENCRYPTION_KEY`.
+The two forms differ and both matter. `JWT_SECRET` is any string of at least 32
+bytes — hex is used here because it contains nothing an env-var pipeline can
+mangle. `ENCRYPTION_KEY` **must be base64 that decodes to exactly 32 bytes**, so
+`-base64 32` is correct and `-hex 32` is not.
+
+Set both on **`api` and `worker`, identically**. The API refuses to start in
+`ENVIRONMENT=production` with a short, default or missing value, and the error
+names the command to run. Do not work around it with `ENVIRONMENT=development`:
+a guessable signing key forges every token in the product.
 
 `ENCRYPTION_KEY` decrypts every stored Wazuh password. Lose it and you re-enter
 every client's credentials; change it and you must re-encrypt them. Put both in
@@ -100,8 +108,26 @@ a password manager before pasting them into Coolify.
 
 ## 3. Managed resources
 
-New project, then add **PostgreSQL 16** and **Redis 7**. Set `appendonly yes` on
-Redis and enable daily backups on Postgres.
+New project, then add **PostgreSQL 16** and **Redis 7**, and enable daily
+backups on Postgres.
+
+On the Redis resource, put this in the **Redis Conf** textarea on the General
+page, then start it:
+
+```
+appendonly yes
+appendfsync everysec
+```
+
+Redis holds the ingest buffer — alerts already answered with `202` that the
+worker has not yet written to Postgres. The manager considers those delivered
+and will never resend them, so with only RDB snapshots a Redis restart loses
+them permanently. `everysec` caps that at about a second; `always` fsyncs every
+write and will hurt on a small host.
+
+Set the Postgres **Initial Database** and password before the first start.
+Postgres only applies them when it initialises an empty volume — change them
+afterwards and Coolify's fields drift from the actual credentials.
 
 Take the internal connection strings Coolify gives you. **`DATABASE_URL` must use
 the asyncpg driver** — Coolify hands you a `postgresql://` URL and the API will
@@ -171,8 +197,13 @@ python -m app.cli create-user --email you@awdtech.co.za \
 ## 9. Verify before onboarding anyone
 
 ```bash
-curl https://soc.awdtech.co.za/healthz
+curl https://soc.awdtech.co.za/api/healthz
 ```
+
+**`/api/healthz`, not `/healthz`.** Traefik routes `/api` to the API and
+everything else to the web container, so the bare path returns the SPA. The root
+`/healthz` still exists for Coolify's container probe, which never goes through
+Traefik — that is what the health check field on the `api` resource should use.
 
 `postgres.ok`, `redis.ok` and `worker.alive` must all be true. Sign in at
 `https://soc.awdtech.co.za`.

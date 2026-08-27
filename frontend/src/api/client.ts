@@ -116,7 +116,9 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 
 export { refreshAccessToken };
 
-/** `/healthz` sits at the origin root, outside the versioned API. */
+/** Health sits outside the versioned API, at `/api/healthz`. Traefik routes
+ *  `/api` to the backend, so the bare `/healthz` the container probe uses is not
+ *  reachable from a browser. */
 export async function rootGet<T>(path: string): Promise<T> {
   const response = await fetch(path);
   if (!response.ok && response.status !== 503) {

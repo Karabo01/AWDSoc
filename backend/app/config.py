@@ -85,9 +85,19 @@ class Settings(BaseSettings):
         if self.environment != "production":
             return self
         if len(self.jwt_secret.encode()) < 32 or self.jwt_secret == "dev-only-change-me":
-            raise ValueError("JWT_SECRET must be at least 32 bytes in production")
+            raise ValueError(
+                "JWT_SECRET must be at least 32 bytes in production. "
+                "Generate one with: openssl rand -hex 32 "
+                "(set the same value on the api and worker resources)"
+            )
         if not self.encryption_key:
-            raise ValueError("ENCRYPTION_KEY must be set in production")
+            raise ValueError(
+                "ENCRYPTION_KEY must be set in production. "
+                "Generate one with: openssl rand -base64 32 "
+                "(exactly 32 bytes, base64; the same value on api and worker). "
+                "It decrypts stored Wazuh passwords, so keep a copy - losing it "
+                "means re-entering every client credential"
+            )
         return self
 
     @model_validator(mode="after")
