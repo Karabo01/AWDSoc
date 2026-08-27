@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.deps.auth import CurrentUser, accessible_tenant_ids
 from app.deps.rbac import require_roles
+from app.ingest.parser import NORMALISATION_FAILED, NOT_NORMALISED
 from app.ingest.stream import stream_depth
 from app.models import Alert, IngestStat, Tenant
 
@@ -38,6 +39,10 @@ class TenantIngest(BaseModel):
     # Silence is the failure mode that looks like success. An onboarded client
     # that has never delivered is almost always a misconfigured integration.
     silent: bool
+    # A normalisation failure nobody looks at is the same as a dropped alert.
+    # Bounded to the recent window so this stays one indexed range scan.
+    failed_normalisation: int
+    awaiting_normalisation: int
 
 
 class IngestStatus(BaseModel):
@@ -62,22 +67,34 @@ async def ingest_status(user: CurrentUser, session: Session) -> IngestStatus:
         )
     }
 
-    # Bounded to the last 48h so this never scans beyond two partitions.
+    # Bounded to the last 48h so this rides the (tenant_id, timestamp desc)
+    # index and never scans beyond two partitions.
     since = datetime.now(UTC) - timedelta(hours=48)
-    latest = dict(
-        (
+    recent = {
+        row.tenant_id: row
+        for row in (
             await session.execute(
-                select(Alert.tenant_id, func.max(Alert.timestamp))
+                select(
+                    Alert.tenant_id.label("tenant_id"),
+                    func.max(Alert.timestamp).label("last_alert_at"),
+                    func.count(Alert.id)
+                    .filter(Alert.map_version == NORMALISATION_FAILED)
+                    .label("failed"),
+                    func.count(Alert.id)
+                    .filter(Alert.map_version == NOT_NORMALISED)
+                    .label("awaiting"),
+                )
                 .where(Alert.timestamp >= since)
                 .group_by(Alert.tenant_id)
             )
         ).all()
-    )
+    }
 
     rows = []
     for tenant in tenants:
         stat = stats.get(tenant.id)
-        last_seen = latest.get(tenant.id)
+        window = recent.get(tenant.id)
+        last_seen = window.last_alert_at if window else None
         rows.append(
             TenantIngest(
                 tenant_id=str(tenant.id),
@@ -87,6 +104,8 @@ async def ingest_status(user: CurrentUser, session: Session) -> IngestStatus:
                 bytes_today=stat.bytes_in if stat else 0,
                 last_alert_at=last_seen,
                 silent=last_seen is None and tenant.status == "active",
+                failed_normalisation=window.failed if window else 0,
+                awaiting_normalisation=window.awaiting if window else 0,
             )
         )
 

@@ -93,6 +93,8 @@ cd frontend && npm run build          # tsc -b is the type check
 | `backend/app/deps/` | `auth`, `rbac`, `tenancy` â€” enforcement lives here, not in handlers |
 
 | `backend/app/ingest/` | The trust boundary: HMAC auth, tenant cache, Redis producer |
+| `backend/app/normalisation/` | The mapping engine and `maps/v1.yaml`, which is data not code |
+| `backend/tests/fixtures/alerts/` | One fixture per decoder family; every production mapping bug becomes one |
 | `backend/app/workers/` | arq worker: ingest consumer, heartbeat, partition maintenance |
 
 | `backend/alembic/versions/0001_initial_schema.py` | Full schema as explicit DDL |

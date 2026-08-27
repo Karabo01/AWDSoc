@@ -466,6 +466,10 @@ overrides:
 
 First non-null path per field wins. Overrides merge over defaults, matched by `rule.groups` intersection. Adding FortiGate or a new O365 subscription is a YAML edit, not a code change.
 
+**Decided: the normalised document is stored with flat dotted keys** (`{"source.ip": "41.1.2.3"}`), not nested objects. It keeps a containment query a single GIN lookup on `ecs jsonb_path_ops`, and it keeps the map file and the stored document readable as the same shape — what you write in the YAML is literally what you see in the inspector. The `related.*` arrays are separate columns regardless, so nothing about entity pivoting depends on this choice.
+
+Two sentinel values on `map_version` distinguish states that otherwise look alike in a query: **`0` means not normalised yet**, **`-1` means normalisation was attempted and threw**. Conflating them would leave the reprocess endpoint unable to tell a backlog from a bug.
+
 The map is global, not per-tenant. Onboarding a client with an unusual decoder means extending the shared map, which benefits every tenant. Resist per-tenant maps — they fragment the entity model and make the pivot useless.
 
 ### `related.*` is the point
@@ -476,6 +480,8 @@ After extraction, walk the normalised document and collect every value of each t
 - `related_user` — every username; lowercase for matching, store as observed
 - `related_host` — `agent.name`, `host.name`, any hostname field
 - `related_hash` — all hash values
+
+Type is inferred from value shape for addresses and hashes, and from field name for usernames and hostnames — a username is not knowable by looking at it. Loopback, unspecified and reserved addresses are dropped: an entity page for `127.0.0.1` is noise in every tenant. Private ranges are kept, because `10.x` is exactly what an analyst pivots on during lateral movement. The `full_log` regex sweep is driven by an allowlist of rule groups in the map rather than run over every alert, which would be both expensive and noisy.
 
 One query on `related_ip @> ARRAY['41.x.x.x'::inet]` returns every alert touching that address whether it was source, destination, or buried in a log line. That array is the entire basis of the entity pages. Without it you have an alert list; with it you have a pivotable graph.
 

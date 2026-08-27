@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
 import { rootGet } from "@/api/client";
 import type { Health } from "@/api/types";
@@ -102,6 +103,14 @@ export function Overview() {
                 <span className="text-xs text-[color:var(--sev-med)]">
                   Check the integration block on their manager
                 </span>
+              )}
+              {tenant.failed_normalisation > 0 && (
+                <Link
+                  to="/alerts?map_version=-1"
+                  className="text-xs text-[color:var(--sev-high)] underline transition hover:brightness-125"
+                >
+                  {tenant.failed_normalisation} failed to normalise
+                </Link>
               )}
             </div>
           ))}

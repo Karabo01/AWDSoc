@@ -9,6 +9,9 @@ export interface TenantIngest {
   last_alert_at: string | null;
   /** Onboarded but never delivered — almost always a misconfigured integration. */
   silent: boolean;
+  /** Recent window only. A failure nobody looks at is a dropped alert. */
+  failed_normalisation: number;
+  awaiting_normalisation: number;
 }
 
 export interface IngestStatus {

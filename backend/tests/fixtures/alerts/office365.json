@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-08-27T11:44:12.000+0000",
+  "rule": {
+    "level": 8,
+    "description": "Office 365 risky sign-in",
+    "id": "91560",
+    "mitre": {"id": ["T1078"], "tactic": ["Initial Access"]},
+    "groups": ["office365"]
+  },
+  "agent": {"id": "000", "name": "wazuh-shared-01"},
+  "manager": {"name": "wazuh-shared-01"},
+  "id": "1756295052.2210934",
+  "location": "office365",
+  "data": {
+    "office365": {
+      "Workload": "AzureActiveDirectory",
+      "Operation": "UserLoggedIn",
+      "UserId": "jsmith@acme.co.za",
+      "ClientIP": "102.65.200.14",
+      "ResultStatus": "Success"
+    }
+  }
+}

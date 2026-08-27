@@ -14,6 +14,7 @@ from arq.connections import RedisSettings
 from app.config import settings
 from app.redis_client import get_redis
 from app.workers import ingest_consumer
+from app.workers.reprocess import reprocess_alerts
 from app.workers.tasks import heartbeat, maintain_partitions
 
 log = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ async def shutdown(ctx) -> None:
 
 class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
-    functions = [maintain_partitions]
+    functions = [maintain_partitions, reprocess_alerts]
     cron_jobs = [
         cron(heartbeat, second={0, 30}, run_at_startup=True),
         cron(maintain_partitions, hour=3, minute=17, run_at_startup=True),

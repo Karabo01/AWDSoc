@@ -1,0 +1,7 @@
+{
+  "timestamp": "2026-08-27T15:00:00.000+0000",
+  "rule": "this-decoder-emitted-a-string-where-an-object-belongs",
+  "agent": [],
+  "id": "1756306800.6610004",
+  "data": {"srcip": ["not", "an", "address"]}
+}

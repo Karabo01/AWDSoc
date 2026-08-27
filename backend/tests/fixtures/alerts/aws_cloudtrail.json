@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-08-27T14:05:22.000+0000",
+  "rule": {
+    "level": 6,
+    "description": "AWS console sign-in without MFA",
+    "id": "80402",
+    "groups": ["amazon", "aws", "aws_cloudtrail"]
+  },
+  "agent": {"id": "000", "name": "wazuh-shared-01"},
+  "manager": {"name": "wazuh-shared-01"},
+  "id": "1756303522.5510113",
+  "location": "aws-cloudtrail",
+  "data": {
+    "aws": {
+      "eventName": "ConsoleLogin",
+      "awsRegion": "af-south-1",
+      "sourceIPAddress": "196.10.52.7",
+      "userIdentity": {"userName": "deploy-bot", "accountId": "123456789012"}
+    }
+  }
+}

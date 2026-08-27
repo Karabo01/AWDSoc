@@ -1,0 +1,144 @@
+# ECS mapping, version 1.
+#
+# This file is data, not code. Onboarding a client with an unusual decoder means
+# extending this map, which benefits every tenant. Resist per-tenant maps: they
+# fragment the entity model and make the pivot useless.
+#
+# Semantics:
+#   - A field maps to a LIST of source paths. First non-null wins.
+#   - Or to {const: value} for a literal.
+#   - `overrides` merge over `defaults`, selected by intersection with rule.groups.
+#   - Source paths are dotted paths into the raw Wazuh alert.
+#
+# The normalised document is stored with FLAT dotted keys ("source.ip"), not
+# nested objects. That keeps `ecs @> '{"source.ip":"41.1.2.3"}'` a single GIN
+# lookup and keeps this file and the stored document readable as the same thing.
+
+version: 1
+
+defaults:
+  "@timestamp":        [timestamp]
+  event.severity:      [rule.level]
+  event.code:          [rule.id]
+  event.action:        [rule.description]
+  host.name:           [agent.name]
+  host.ip:             [agent.ip]
+  agent.id:            [agent.id]
+  observer.name:       [manager.name]
+  threat.technique.id: [rule.mitre.id]
+  threat.tactic.name:  [rule.mitre.tactic]
+  log.file.path:       [location]
+
+  source.ip:
+    - data.srcip
+    - data.win.eventdata.ipAddress
+    - data.aws.sourceIPAddress
+    - data.office365.ClientIP
+    - data.gcp.jsonPayload.sourceIP
+  source.port:
+    - data.srcport
+    - data.win.eventdata.ipPort
+  destination.ip:
+    - data.dstip
+    - data.win.eventdata.destinationIp
+  destination.port:
+    - data.dstport
+    - data.win.eventdata.destinationPort
+  user.name:
+    - data.srcuser
+    - data.dstuser
+    - data.win.eventdata.targetUserName
+    - data.win.eventdata.subjectUserName
+    - data.office365.UserId
+    - data.aws.userIdentity.userName
+  process.name:
+    - data.win.eventdata.image
+    - data.audit.exe
+    - data.process.name
+  process.pid:
+    - data.win.eventdata.processId
+    - data.audit.pid
+  process.parent.name:
+    - data.win.eventdata.parentImage
+  process.command_line:
+    - data.win.eventdata.commandLine
+  file.path:
+    - syscheck.path
+    - data.win.eventdata.targetFilename
+  file.hash.sha256:
+    - syscheck.sha256_after
+    - data.win.eventdata.hashes
+  file.hash.sha1:
+    - syscheck.sha1_after
+  file.hash.md5:
+    - syscheck.md5_after
+  network.protocol:
+    - data.protocol
+  url.original:
+    - data.url
+
+# Selected by rule.groups membership, merged over defaults.
+overrides:
+  - match_groups: [office365]
+    fields:
+      event.provider: [data.office365.Workload]
+      event.action:   [data.office365.Operation]
+      user.name:      [data.office365.UserId]
+      source.ip:      [data.office365.ClientIP]
+
+  - match_groups: [fortigate]
+    fields:
+      network.protocol: [data.proto]
+      event.provider:   {const: fortigate}
+      source.ip:        [data.srcip]
+      destination.ip:   [data.dstip]
+
+  - match_groups: [syscheck]
+    fields:
+      event.category: {const: file}
+      file.path:      [syscheck.path]
+
+  - match_groups: [windows, sysmon, sysmon_eid1_detections]
+    fields:
+      event.provider: [data.win.system.providerName]
+      event.code:     [data.win.system.eventID]
+
+  - match_groups: [aws, amazon]
+    fields:
+      event.provider:  {const: aws}
+      event.action:    [data.aws.eventName]
+      cloud.region:    [data.aws.awsRegion]
+      cloud.account.id: [data.aws.userIdentity.accountId]
+
+  - match_groups: [sshd, ssh]
+    fields:
+      event.category: {const: authentication}
+      network.protocol: {const: ssh}
+
+# How `related.*` is populated. Type is inferred from value shape for addresses
+# and hashes, but usernames and hostnames are only knowable by field name.
+related:
+  user_fields:
+    - user.name
+    - user.target.name
+    - source.user.name
+    - destination.user.name
+  host_fields:
+    - host.name
+    - host.hostname
+    - agent.name
+    - destination.domain
+    - source.domain
+  # Rule groups whose full_log is known to embed addresses worth sweeping for.
+  # A regex sweep over every alert's full_log would be expensive and noisy, so
+  # this is an allowlist rather than a default.
+  full_log_ip_scan_groups:
+    - sshd
+    - ssh
+    - pam
+    - web
+    - apache
+    - nginx
+    - fortigate
+    - firewall
+    - iptables

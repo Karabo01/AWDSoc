@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-08-27T12:10:05.400+0000",
+  "rule": {
+    "level": 9,
+    "description": "FortiGate: traffic denied by policy",
+    "id": "81605",
+    "groups": ["fortigate", "firewall"]
+  },
+  "agent": {"id": "000", "name": "wazuh-shared-01"},
+  "manager": {"name": "wazuh-shared-01"},
+  "id": "1756296605.3310021",
+  "location": "/var/log/fortigate.log",
+  "full_log": "date=2026-08-27 time=12:10:05 devname=\"FG100\" srcip=185.220.101.44 dstip=10.20.0.31 srcport=44122 dstport=3389 proto=6 action=deny",
+  "data": {
+    "srcip": "185.220.101.44",
+    "dstip": "10.20.0.31",
+    "srcport": "44122",
+    "dstport": "3389",
+    "proto": "6",
+    "action": "deny"
+  }
+}

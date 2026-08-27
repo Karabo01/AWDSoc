@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1 import api_router
 from app.api.v1 import health as health_routes
 from app.config import settings
+from app.queue import close_arq_pool
 from app.redis_client import close_redis
 
 logging.basicConfig(
@@ -19,6 +20,7 @@ log = logging.getLogger(settings.app_name)
 async def lifespan(app: FastAPI):
     log.info("starting %s (%s)", settings.app_name, settings.environment)
     yield
+    await close_arq_pool()
     await close_redis()
 
 

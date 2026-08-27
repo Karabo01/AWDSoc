@@ -5,6 +5,8 @@ import { onSessionEnded } from "@/api/client";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
+import { AlertDetail } from "@/routes/AlertDetail";
+import { Alerts } from "@/routes/Alerts";
 import { Login } from "@/routes/Login";
 import { Overview } from "@/routes/Overview";
 import { Placeholder } from "@/routes/Placeholder";
@@ -35,7 +37,8 @@ export function App() {
           path="/incidents"
           element={<Placeholder title="Incidents" milestone="M5" />}
         />
-        <Route path="/alerts" element={<Placeholder title="Alerts" milestone="M4" />} />
+        <Route path="/alerts" element={<Alerts />} />
+        <Route path="/alerts/:id" element={<AlertDetail />} />
         <Route
           path="/entities"
           element={<Placeholder title="Entities" milestone="M6" />}

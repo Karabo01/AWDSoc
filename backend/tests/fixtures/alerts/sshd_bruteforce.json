@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-08-27T13:30:00.000+0000",
+  "rule": {
+    "level": 10,
+    "description": "sshd: brute force trying to get access to the system",
+    "id": "5712",
+    "frequency": 8,
+    "mitre": {"id": ["T1110"], "tactic": ["Credential Access"]},
+    "groups": ["syslog", "sshd", "authentication_failures"]
+  },
+  "agent": {"id": "007", "name": "web01", "ip": "10.20.0.31"},
+  "manager": {"name": "wazuh-shared-01"},
+  "id": "1756301400.4410882",
+  "location": "/var/log/auth.log",
+  "full_log": "Aug 27 13:30:00 web01 sshd[4412]: Failed password for invalid user admin from 45.155.205.233 port 40122 ssh2",
+  "predecoder": {"hostname": "web01"},
+  "data": {"srcip": "45.155.205.233", "srcport": "40122", "srcuser": "admin"}
+}

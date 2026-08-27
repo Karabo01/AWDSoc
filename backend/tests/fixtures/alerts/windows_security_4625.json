@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-08-27T09:15:00.123+0000",
+  "rule": {
+    "level": 5,
+    "description": "Windows logon failure",
+    "id": "60122",
+    "mitre": {"id": ["T1110"], "tactic": ["Credential Access"], "technique": ["Brute Force"]},
+    "groups": ["windows", "windows_security", "authentication_failed"]
+  },
+  "agent": {"id": "004", "name": "DC01", "ip": "10.20.0.10"},
+  "manager": {"name": "wazuh-shared-01"},
+  "id": "1756286100.884213",
+  "decoder": {"name": "windows_eventchannel"},
+  "location": "EventChannel",
+  "data": {
+    "win": {
+      "system": {
+        "providerName": "Microsoft-Windows-Security-Auditing",
+        "eventID": "4625",
+        "computer": "DC01.acme.local"
+      },
+      "eventdata": {
+        "targetUserName": "Administrator",
+        "subjectUserName": "DC01$",
+        "ipAddress": "41.72.14.9",
+        "ipPort": "51422",
+        "logonType": "3"
+      }
+    }
+  }
+}

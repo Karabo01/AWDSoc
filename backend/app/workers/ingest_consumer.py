@@ -22,10 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import SessionLocal
-from app.incidents.grouping import fingerprint
-from app.ingest.parser import NOT_NORMALISED, parse
+from app.incidents.grouping import fingerprint, primary_entity
+from app.ingest.parser import parse
 from app.ingest.stream import ensure_consumer_group
 from app.models import Alert, IngestStat
+from app.normalisation.pipeline import normalise_alert
 from app.redis_client import get_redis
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ CLAIM_IDLE_MS = 60_000
 
 def _row(tenant_id: uuid.UUID, alert: dict) -> dict:
     parsed = parse(alert)
+    normalised = normalise_alert(alert)
     return {
         "tenant_id": tenant_id,
         "wazuh_id": parsed.wazuh_id,
@@ -50,16 +52,19 @@ def _row(tenant_id: uuid.UUID, alert: dict) -> dict:
         "mitre_tactics": parsed.mitre_tactics,
         "agent_id": parsed.agent_id,
         "agent_name": parsed.agent_name,
-        "ecs": {},
+        "ecs": normalised.ecs,
+        # Never mutated. Every normalisation failure stays replayable because of it.
         "raw": alert,
-        "map_version": NOT_NORMALISED,
-        "related_ip": [],
-        "related_user": [],
-        "related_host": [],
-        "related_hash": [],
-        # Recomputed in M4 against the normalised document.
+        "map_version": normalised.map_version,
+        "related_ip": normalised.related_ip,
+        "related_user": normalised.related_user,
+        "related_host": normalised.related_host,
+        "related_hash": normalised.related_hash,
         "fingerprint": fingerprint(
-            tenant_id=tenant_id, rule_id=parsed.rule_id, agent_id=parsed.agent_id
+            tenant_id=tenant_id,
+            rule_id=parsed.rule_id,
+            agent_id=parsed.agent_id,
+            primary_entity=primary_entity(normalised.ecs),
         ),
         "incident_id": None,
     }
