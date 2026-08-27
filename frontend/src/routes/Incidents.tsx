@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "@/api/client";
 import { type IncidentFilters, listIncidents } from "@/api/incidents";
@@ -12,6 +12,12 @@ import { useAuth } from "@/hooks/useAuth";
 
 const input =
   "rounded border border-line bg-ink-900 px-2 py-1 text-sm outline-none transition focus:border-accent";
+
+/** A case is addressed by client and number, not by UUID, so the URL is
+ *  something an analyst can read out loud. */
+function caseHref(incident: { tenant_slug: string | null; number: number }): string {
+  return `/incidents/${incident.tenant_slug ?? "-"}/${incident.number}`;
+}
 
 function relative(value: string): string {
   const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60000);
@@ -26,6 +32,7 @@ function relative(value: string): string {
  *  tenant chip, a client token gets the same list without it. */
 export function Incidents() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState(params.get("q") ?? "");
 
@@ -153,7 +160,19 @@ export function Incidents() {
               {incidents.map((incident) => (
                 <tr
                   key={incident.id}
-                  className="border-b border-line transition last:border-b-0 hover:bg-ink-800"
+                  // The whole row opens the case. An analyst working a queue
+                  // aims at the row, not at the four characters of the title.
+                  onClick={() => navigate(caseHref(incident))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      navigate(caseHref(incident));
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`Incident ${incident.number}: ${incident.title}`}
+                  className="cursor-pointer border-b border-line outline-none transition last:border-b-0 hover:bg-ink-800 focus-visible:bg-ink-800 focus-visible:ring-1 focus-visible:ring-accent"
                   style={{
                     boxShadow: user?.is_staff
                       ? `inset 3px 0 0 ${incident.tenant_colour ?? "transparent"}`
@@ -165,7 +184,8 @@ export function Incidents() {
                   </td>
                   <td className="px-3 py-2">
                     <Link
-                      to={`/incidents/${incident.tenant_slug}/${incident.number}`}
+                      to={caseHref(incident)}
+                      onClick={(e) => e.stopPropagation()}
                       className="transition hover:text-accent"
                     >
                       {incident.title}
