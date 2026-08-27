@@ -92,7 +92,8 @@ cd frontend && npm run build          # tsc -b is the type check
 
 | `backend/app/deps/` | `auth`, `rbac`, `tenancy` â€” enforcement lives here, not in handlers |
 
-| `backend/app/workers/` | arq worker: heartbeat, partition maintenance |
+| `backend/app/ingest/` | The trust boundary: HMAC auth, tenant cache, Redis producer |
+| `backend/app/workers/` | arq worker: ingest consumer, heartbeat, partition maintenance |
 
 | `backend/alembic/versions/0001_initial_schema.py` | Full schema as explicit DDL |
 
@@ -119,6 +120,12 @@ No endpoint takes a tenant parameter, and `tests/test_app.py` fails the build if
 one appears.
 
 
+
+**A rejected ingest request must cost the same as an accepted one.** Unknown
+slug, bad signature, stale timestamp and blocked IP all return an identical 401
+after exactly one HMAC, so the endpoint cannot be used to enumerate tenants.
+`tests/test_ingest_auth.py` asserts the HMAC count structurally rather than by
+wall clock.
 
 **The console never writes to Wazuh and never queries an indexer.** Alerts arrive
 

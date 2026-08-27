@@ -28,6 +28,26 @@ class Settings(BaseSettings):
 
     ingest_max_skew_seconds: int = 300
     ingest_rate_limit_per_tenant: str = "500/second"
+    # A single request may carry one alert object or an array. The array form
+    # exists so a batching sidecar can arrive without an API change.
+    ingest_max_batch: int = 500
+    ingest_max_body_bytes: int = 4 * 1024 * 1024
+    # Traefik appends the real peer to X-Forwarded-For, so the trustworthy entry
+    # is counted from the RIGHT. One hop = Traefik only.
+    ingest_trusted_proxy_hops: int = 1
+
+    ingest_stream_key: str = "awdsoc:alerts"
+    ingest_consumer_group: str = "writers"
+    # Bounds Redis memory if the worker dies. Roughly a day of a busy cohort.
+    ingest_stream_maxlen: int = 1_000_000
+
+    # Tenant auth is cached so ingest costs no database round trip. On a refresh
+    # failure the stale entry is served until the hard TTL - a degraded Postgres
+    # must not stop ingestion.
+    tenant_cache_soft_ttl: int = 30
+    tenant_cache_hard_ttl: int = 900
+    # Unknown slugs are cached too, or a scanner hammers Postgres for free.
+    tenant_cache_negative_ttl: int = 10
     alert_retention_days: int = 90
     normalisation_map_version: int = 1
     wazuh_sync_interval: int = 300
@@ -36,6 +56,19 @@ class Settings(BaseSettings):
     partition_premake_months: int = 3
 
     sql_echo: bool = Field(default=False)
+
+    @property
+    def rate_limit(self) -> tuple[int, int]:
+        """(requests, window_seconds) parsed from e.g. "500/second"."""
+        raw = self.ingest_rate_limit_per_tenant.strip()
+        count, _, unit = raw.partition("/")
+        windows = {"second": 1, "minute": 60, "hour": 3600}
+        try:
+            return int(count), windows[unit.strip().lower()]
+        except (ValueError, KeyError) as exc:
+            raise ValueError(
+                f"INGEST_RATE_LIMIT_PER_TENANT must look like '500/second', got {raw!r}"
+            ) from exc
 
     @model_validator(mode="after")
     def _refuse_weak_production_secrets(self) -> "Settings":
@@ -50,6 +83,13 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET must be at least 32 bytes in production")
         if not self.encryption_key:
             raise ValueError("ENCRYPTION_KEY must be set in production")
+        return self
+
+    @model_validator(mode="after")
+    def _rate_limit_parses(self) -> "Settings":
+        """Checked at import: a typo here would otherwise surface as a 500 on the
+        first alert a client ever sends."""
+        _ = self.rate_limit
         return self
 
 

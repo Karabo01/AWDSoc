@@ -19,6 +19,7 @@ from app.crypto import encrypt
 from app.db import get_session
 from app.deps.auth import CurrentUser
 from app.deps.rbac import require_roles
+from app.ingest.auth import tenant_cache
 from app.models import Tenant, TenantSla, WazuhConnection
 from app.schemas.tenant import (
     ConnectionCheckResult,
@@ -252,6 +253,7 @@ async def update_tenant(
         # Values, never credentials: the password only ever appears as "rotated".
         detail=changed,
     )
+    tenant_cache.invalidate(tenant.slug)
     await session.commit()
     return await _read(session, await _load(session, tenant_id))
 
@@ -278,6 +280,10 @@ async def rotate_secret(
         tenant_id=tenant.id,
         user_id=user.id,
     )
+    # This process only. Other replicas pick the new secret up within
+    # tenant_cache_soft_ttl, which is immaterial: rotation already breaks
+    # delivery until the client's manager is reinstalled.
+    tenant_cache.invalidate(tenant.slug)
     await session.commit()
 
     group = tenant.connection.agent_group if tenant.connection else None

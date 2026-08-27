@@ -49,11 +49,16 @@ async def healthz(response: Response) -> dict[str, Any]:
     healthy = pg_ok and redis_ok
     if not healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    from app.ingest.stream import stream_depth
+
     return {
         "status": "ok" if healthy else "degraded",
         "postgres": {"ok": pg_ok, "error": pg_err},
         "redis": {"ok": redis_ok, "error": redis_err},
         "worker": {"alive": await _worker_alive()},
+        # A growing depth with a live worker means the writer is behind; a
+        # growing depth with no worker means alerts are buffering, not lost.
+        "ingest_backlog": await stream_depth() if redis_ok else -1,
         "environment": settings.environment,
     }
 

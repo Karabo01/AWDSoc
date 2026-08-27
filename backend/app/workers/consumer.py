@@ -1,25 +1,44 @@
 """arq worker entrypoint.
 
-M1 runs only the heartbeat and daily partition maintenance. The Redis Streams
-alert consumer arrives with M3.
+Two jobs run here: scheduled maintenance through arq's cron, and the long-lived
+ingest stream consumer, which arq does not manage - it is started as a task on
+boot and cancelled on shutdown.
 """
+
+import asyncio
+import logging
 
 from arq import cron
 from arq.connections import RedisSettings
 
 from app.config import settings
 from app.redis_client import get_redis
+from app.workers import ingest_consumer
 from app.workers.tasks import heartbeat, maintain_partitions
+
+log = logging.getLogger(__name__)
 
 
 async def startup(ctx) -> None:
     ctx["redis_client"] = get_redis()
+    ctx["stop"] = asyncio.Event()
+    ctx["ingest_task"] = asyncio.create_task(ingest_consumer.run(stop=ctx["stop"]))
     await heartbeat(ctx)
 
 
 async def shutdown(ctx) -> None:
     from app.redis_client import close_redis
 
+    stop = ctx.get("stop")
+    if stop is not None:
+        stop.set()
+    task = ctx.get("ingest_task")
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     await close_redis()
 
 
