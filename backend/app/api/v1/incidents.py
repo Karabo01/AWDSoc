@@ -30,7 +30,7 @@ from app.models import (
     User,
 )
 from app.models.incident import OPEN_STATUSES
-from app.pagination import decode_cursor, encode_cursor
+from app.pagination import decode_cursor, decode_key_cursor, encode_cursor, encode_key_cursor
 from app.schemas.alert import AlertPage, AlertSummary
 from app.schemas.incident import (
     BulkResult,
@@ -51,6 +51,20 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 Scope = Annotated[TenantScope, Depends(get_tenant_scope)]
 
 MAX_PAGE = 200
+
+# Sortable columns, as an allowlist rather than a column name off the request.
+# Each carries the type its keyset cursor decodes as: the cursor is opaque and is
+# never trusted to describe itself, so the sort key sent alongside it is what
+# decides how to read it back.
+SORTS = {
+    "last_seen": (Incident.last_seen, "datetime"),
+    "first_seen": (Incident.first_seen, "datetime"),
+    "created_at": (Incident.created_at, "datetime"),
+    "severity": (Incident.severity, "int"),
+    "number": (Incident.number, "int"),
+    "alert_count": (Incident.alert_count, "int"),
+}
+
 NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such incident.")
 
 
@@ -114,7 +128,17 @@ async def list_incidents(
     to: datetime | None = None,
     q: Annotated[str | None, Query(max_length=200)] = None,
     open_only: bool = False,
+    sort: Annotated[str, Query()] = "last_seen",
+    order: Annotated[str, Query(pattern="^(asc|desc)$")] = "desc",
 ) -> IncidentPage:
+    if sort not in SORTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot sort by {sort}. Sortable columns: {', '.join(SORTS)}.",
+        )
+    sort_column, sort_kind = SORTS[sort]
+    descending = order == "desc"
+
     assignee_user = aliased(User)
     stmt = (
         select(Incident, Tenant, assignee_user)
@@ -164,10 +188,22 @@ async def list_incidents(
         )
 
     if cursor:
-        last_seen, last_id = decode_cursor(cursor)
-        stmt = stmt.where((Incident.last_seen, Incident.id) < (last_seen, last_id))
+        last_key, last_id = decode_key_cursor(cursor, sort_kind)
+        # Keyset, not offset: a page boundary stays correct while rows arrive.
+        # `id` is the tiebreaker, which matters far more on a low-cardinality
+        # column like severity than it does on a timestamp.
+        stmt = stmt.where(
+            (sort_column, Incident.id) < (last_key, last_id)
+            if descending
+            else (sort_column, Incident.id) > (last_key, last_id)
+        )
 
-    stmt = stmt.order_by(Incident.last_seen.desc(), Incident.id.desc()).limit(limit + 1)
+    ordering = (
+        (sort_column.desc(), Incident.id.desc())
+        if descending
+        else (sort_column.asc(), Incident.id.asc())
+    )
+    stmt = stmt.order_by(*ordering).limit(limit + 1)
     rows = (await session.execute(stmt)).all()
 
     has_more = len(rows) > limit
@@ -175,7 +211,9 @@ async def list_incidents(
     now = datetime.now(UTC)
     items = [summarise(i, t, a, now) for i, t, a in rows]
     next_cursor = (
-        encode_cursor(rows[-1][0].last_seen, rows[-1][0].id) if has_more and rows else None
+        encode_key_cursor(getattr(rows[-1][0], sort), rows[-1][0].id)
+        if has_more and rows
+        else None
     )
     return IncidentPage(items=items, next_cursor=next_cursor)
 

@@ -70,3 +70,38 @@ class Overview(BaseModel):
     # tenant exists at all.
     misgrouped_agents: list[MisgroupedAgent] = Field(default_factory=list)
     silent_tenants: list[str] = Field(default_factory=list)
+
+
+class TimeBucket(BaseModel):
+    """One point on the overview charts.
+
+    Incidents are counted by when they were *created*, alerts by when they were
+    *detected*. Those are deliberately different clocks: an incident is our
+    workload and a late-arriving alert should not retro-fill a day we already
+    reported on, while an alert belongs on the day the event actually happened.
+    """
+
+    at: datetime
+    incidents: int = 0
+    alerts: int = 0
+    critical: int = 0
+
+
+class SeveritySlice(BaseModel):
+    label: str
+    severity_min: int
+    count: int
+
+
+class StatusSlice(BaseModel):
+    status: str
+    count: int
+
+
+class OverviewTrend(BaseModel):
+    since: datetime
+    # Hours per bucket, so the chart can label its axis without guessing.
+    bucket_hours: int
+    buckets: list[TimeBucket] = Field(default_factory=list)
+    by_severity: list[SeveritySlice] = Field(default_factory=list)
+    by_status: list[StatusSlice] = Field(default_factory=list)

@@ -76,12 +76,22 @@ export interface IncidentEntity {
   role: string | null;
 }
 
+export type SortKey =
+  | "last_seen"
+  | "first_seen"
+  | "created_at"
+  | "severity"
+  | "number"
+  | "alert_count";
+
 export interface IncidentFilters {
   status?: string[];
   severity_min?: number;
   assignee?: string;
   q?: string;
   open_only?: boolean;
+  sort?: SortKey;
+  order?: "asc" | "desc";
 }
 
 export function listIncidents(filters: IncidentFilters, cursor?: string, limit = 50) {
@@ -91,6 +101,8 @@ export function listIncidents(filters: IncidentFilters, cursor?: string, limit =
   if (filters.assignee) params.set("assignee", filters.assignee);
   if (filters.q) params.set("q", filters.q);
   if (filters.open_only) params.set("open_only", "true");
+  if (filters.sort) params.set("sort", filters.sort);
+  if (filters.order) params.set("order", filters.order);
   if (cursor) params.set("cursor", cursor);
   params.set("limit", String(limit));
   return api<IncidentPage>(`/incidents?${params.toString()}`);

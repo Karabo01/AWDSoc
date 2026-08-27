@@ -137,13 +137,13 @@ export function Alerts() {
       {alerts.length > 0 && (
         <div className="mt-6 overflow-x-auto rounded-lg border border-line">
           <table className="w-full min-w-[52rem] border-collapse text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-ink-800">
               <tr className="border-b border-line text-left text-dim">
-                <th className="px-3 py-2 font-normal">Level</th>
-                <th className="px-3 py-2 font-normal">Time</th>
-                {user?.is_staff && <th className="px-3 py-2 font-normal">Client</th>}
-                <th className="px-3 py-2 font-normal">Rule</th>
-                <th className="px-3 py-2 font-normal">Agent</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Level</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Time</th>
+                {user?.is_staff && <th className="px-3 py-1.5 text-xs font-medium">Client</th>}
+                <th className="px-3 py-1.5 text-xs font-medium">Rule</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Agent</th>
               </tr>
             </thead>
             <tbody>
@@ -157,18 +157,18 @@ export function Alerts() {
                       : undefined,
                   }}
                 >
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-1.5">
                     <SeverityChip level={alert.rule_level} />
                   </td>
-                  <td className="data px-3 py-2 text-xs text-dim">
+                  <td className="data px-3 py-1.5 text-xs text-dim">
                     {timestamp(alert.timestamp)}
                   </td>
                   {user?.is_staff && (
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <TenantChip name={alert.tenant_name} colour={alert.tenant_colour} />
                     </td>
                   )}
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-1.5">
                     <Link
                       to={`/alerts/${alert.id}`}
                       className="transition hover:text-accent"
@@ -182,7 +182,7 @@ export function Alerts() {
                       </span>
                     )}
                   </td>
-                  <td className="data px-3 py-2 text-xs text-dim">
+                  <td className="data px-3 py-1.5 text-xs text-dim">
                     {alert.agent_name ?? "—"}
                   </td>
                 </tr>

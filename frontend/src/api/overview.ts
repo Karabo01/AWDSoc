@@ -53,3 +53,34 @@ export interface Overview {
 }
 
 export const getOverview = () => api<Overview>("/overview");
+
+export interface TimeBucket {
+  at: string;
+  incidents: number;
+  alerts: number;
+  critical: number;
+}
+
+export interface SeveritySlice {
+  label: string;
+  severity_min: number;
+  count: number;
+}
+
+export interface StatusSlice {
+  status: string;
+  count: number;
+}
+
+export interface OverviewTrend {
+  since: string;
+  /** 1 for the hourly view, 24 for the daily one. The chart labels its axis
+   *  from this rather than guessing from the point spacing. */
+  bucket_hours: number;
+  buckets: TimeBucket[];
+  by_severity: SeveritySlice[];
+  by_status: StatusSlice[];
+}
+
+export const getTrend = (days = 7) =>
+  api<OverviewTrend>(`/overview/trend?days=${days}`);

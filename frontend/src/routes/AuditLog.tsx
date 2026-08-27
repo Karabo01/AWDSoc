@@ -125,27 +125,27 @@ export function AuditLog() {
       {entries.length > 0 && (
         <div className="mt-6 overflow-x-auto rounded-lg border border-line">
           <table className="w-full min-w-[48rem] border-collapse text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-ink-800">
               <tr className="border-b border-line text-left text-dim">
-                <th className="px-3 py-2 font-normal">When</th>
-                <th className="px-3 py-2 font-normal">Who</th>
-                <th className="px-3 py-2 font-normal">Action</th>
-                <th className="px-3 py-2 font-normal">Detail</th>
+                <th className="px-3 py-1.5 text-xs font-medium">When</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Who</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Action</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Detail</th>
               </tr>
             </thead>
             <tbody>
               {entries.map((entry) => (
                 <tr key={entry.id} className="border-b border-line last:border-b-0">
-                  <td className="data whitespace-nowrap px-3 py-2 text-xs text-dim">
+                  <td className="data whitespace-nowrap px-3 py-1.5 text-xs text-dim">
                     {new Date(entry.created_at).toLocaleString()}
                   </td>
-                  <td className="px-3 py-2 text-xs">
+                  <td className="px-3 py-1.5 text-xs">
                     {entry.actor_name ?? (
                       <span className="text-dim">system</span>
                     )}
                   </td>
-                  <td className="data px-3 py-2 text-xs">{entry.action}</td>
-                  <td className="px-3 py-2 text-xs text-dim">
+                  <td className="data px-3 py-1.5 text-xs">{entry.action}</td>
+                  <td className="px-3 py-1.5 text-xs text-dim">
                     {summarise(entry.detail) || "—"}
                   </td>
                 </tr>

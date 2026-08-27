@@ -172,15 +172,15 @@ export function Agents() {
       {agents.length > 0 && (
         <div className="mt-6 overflow-x-auto rounded-lg border border-line">
           <table className="w-full min-w-[52rem] border-collapse text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-ink-800">
               <tr className="border-b border-line text-left text-dim">
-                <th className="px-3 py-2 font-normal">Status</th>
-                <th className="px-3 py-2 font-normal">Agent</th>
-                {user?.is_staff && <th className="px-3 py-2 font-normal">Client</th>}
-                <th className="px-3 py-2 font-normal">Address</th>
-                <th className="px-3 py-2 font-normal">OS</th>
-                <th className="px-3 py-2 font-normal">Version</th>
-                <th className="px-3 py-2 font-normal">Last keepalive</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Status</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Agent</th>
+                {user?.is_staff && <th className="px-3 py-1.5 text-xs font-medium">Client</th>}
+                <th className="px-3 py-1.5 text-xs font-medium">Address</th>
+                <th className="px-3 py-1.5 text-xs font-medium">OS</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Version</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Last keepalive</th>
               </tr>
             </thead>
             <tbody>
@@ -206,33 +206,33 @@ export function Agents() {
                         : undefined,
                     }}
                   >
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <StatusDot status={agent.status} />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       {agent.name}
                       <span className="data ml-2 text-xs text-dim">
                         {agent.agent_id}
                       </span>
                     </td>
                     {user?.is_staff && (
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1.5">
                         <TenantChip
                           name={agent.tenant_name}
                           colour={agent.tenant_colour}
                         />
                       </td>
                     )}
-                    <td className="data px-3 py-2 text-xs text-dim">
+                    <td className="data px-3 py-1.5 text-xs text-dim">
                       {agent.ip ?? "—"}
                     </td>
-                    <td className="px-3 py-2 text-xs text-dim">
+                    <td className="px-3 py-1.5 text-xs text-dim">
                       {agent.os_name ?? agent.os_platform ?? "—"}
                     </td>
-                    <td className="data px-3 py-2 text-xs text-dim">
+                    <td className="data px-3 py-1.5 text-xs text-dim">
                       {agent.version ?? "—"}
                     </td>
-                    <td className="data px-3 py-2 text-xs text-dim">
+                    <td className="data px-3 py-1.5 text-xs text-dim">
                       {agent.last_keepalive ? relative(agent.last_keepalive) : "never"}
                     </td>
                   </tr>

@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getAccessToken, refreshAccessToken } from "@/api/client";
 
@@ -18,23 +18,31 @@ export interface IncidentEvent {
 
 /** Live queue updates over SSE.
  *
- *  The event carries no incident data worth rendering — it is a nudge, and the
- *  handler refetches. That is deliberate: pub/sub drops messages for anyone not
- *  currently subscribed, so treating the event as the source of truth would mean
- *  a dropped message becomes a missing row. Refetching means it costs one round
- *  trip instead.
+ *  **Nothing is merged into the list automatically.** New incidents accumulate
+ *  into a count the queue shows as a pill, and the analyst clicks to take them.
+ *  A list that reorders itself under a pointer that is already moving toward a
+ *  row is how the wrong case gets opened — per DESIGN §8.
  *
- *  `EventSource` cannot send an Authorization header, so the access token goes in
- *  the query string. It reconnects on its own, but not after a 401 — an expired
- *  token needs a new URL, so that case is handled here by refreshing and
- *  remounting the connection. */
+ *  The event itself carries no data worth rendering; it is a nudge, and merging
+ *  refetches. That is deliberate: pub/sub drops messages for anyone not
+ *  currently subscribed, so treating the event as the source of truth would turn
+ *  a dropped message into a permanently missing row.
+ *
+ *  `EventSource` cannot send an Authorization header, so the access token goes
+ *  in the query string. It reconnects on its own, but not after a 401 — an
+ *  expired token needs a new URL, so that case is handled here. */
 export function useIncidentStream(enabled = true) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<StreamState>("connecting");
-  const [lastEvent, setLastEvent] = useState<IncidentEvent | null>(null);
+  const [pending, setPending] = useState(0);
   // Bumped to force a reconnect with a fresh token after an auth failure.
   const [attempt, setAttempt] = useState(0);
   const retries = useRef(0);
+
+  const merge = useCallback(() => {
+    setPending(0);
+    void queryClient.invalidateQueries({ queryKey: ["incidents"] });
+  }, [queryClient]);
 
   useEffect(() => {
     if (!enabled) {
@@ -60,16 +68,24 @@ export function useIncidentStream(enabled = true) {
     };
 
     source.addEventListener("incident", (event) => {
+      let payload: IncidentEvent | null = null;
       try {
-        const payload = JSON.parse((event as MessageEvent).data) as IncidentEvent;
-        setLastEvent(payload);
+        payload = JSON.parse((event as MessageEvent).data) as IncidentEvent;
       } catch {
-        /* a malformed event is not worth breaking the stream over */
+        return; // a malformed event is not worth breaking the stream over
       }
-      // Invalidate rather than patch. The row the queue wants depends on the
-      // filters in force, and the server is the only thing that knows them.
-      void queryClient.invalidateQueries({ queryKey: ["incidents"] });
+
+      // The overview is a set of counters nobody is pointing at, so it can
+      // refresh itself. The queue cannot.
       void queryClient.invalidateQueries({ queryKey: ["overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["overview-trend"] });
+
+      if (payload.kind === "created") {
+        setPending((count) => count + 1);
+      }
+      // "updated" and "alert" touch a row that is already on screen. Refreshing
+      // the detail behind the pane is safe; the list order is not disturbed.
+      void queryClient.invalidateQueries({ queryKey: ["incident"] });
     });
 
     source.onerror = () => {
@@ -78,7 +94,7 @@ export function useIncidentStream(enabled = true) {
       if (cancelled) return;
 
       // Back off rather than hammer: a console left open against a restarting
-      // API should not turn into a reconnect storm.
+      // API should not become a reconnect storm.
       retries.current += 1;
       const delay = Math.min(1000 * 2 ** (retries.current - 1), 30_000);
       timer = setTimeout(() => {
@@ -95,5 +111,5 @@ export function useIncidentStream(enabled = true) {
     };
   }, [enabled, queryClient, attempt]);
 
-  return { state, lastEvent };
+  return { state, pending, merge };
 }

@@ -163,10 +163,10 @@ export function EntityDetail() {
               <tbody>
                 {incidents.data.items.map((incident) => (
                   <tr key={incident.id} className="border-b border-line last:border-b-0">
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <SeverityChip level={incident.severity} />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <Link
                         to={`/incidents/${incident.tenant_slug ?? "-"}/${incident.number}`}
                         className="transition hover:text-accent"
@@ -177,10 +177,10 @@ export function EntityDetail() {
                         #{incident.number}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <StatusBadge status={incident.status} />
                     </td>
-                    <td className="data px-3 py-2 text-xs text-dim">
+                    <td className="data px-3 py-1.5 text-xs text-dim">
                       {relative(incident.last_seen)}
                     </td>
                   </tr>
@@ -210,10 +210,10 @@ export function EntityDetail() {
                   <tbody>
                     {alerts.data.items.map((alert) => (
                       <tr key={alert.id} className="border-b border-line last:border-b-0">
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1.5">
                           <SeverityChip level={alert.rule_level} />
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1.5">
                           <Link
                             to={`/alerts/${alert.id}`}
                             className="transition hover:text-accent"
@@ -221,10 +221,10 @@ export function EntityDetail() {
                             {alert.rule_desc}
                           </Link>
                         </td>
-                        <td className="data px-3 py-2 text-xs text-dim">
+                        <td className="data px-3 py-1.5 text-xs text-dim">
                           {alert.agent_name ?? "—"}
                         </td>
-                        <td className="data px-3 py-2 text-xs text-dim">
+                        <td className="data px-3 py-1.5 text-xs text-dim">
                           {relative(alert.timestamp)}
                         </td>
                       </tr>

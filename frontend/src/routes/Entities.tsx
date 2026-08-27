@@ -129,14 +129,14 @@ export function Entities() {
       {entities.length > 0 && (
         <div className="mt-6 overflow-x-auto rounded-lg border border-line">
           <table className="w-full min-w-[46rem] border-collapse text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-ink-800">
               <tr className="border-b border-line text-left text-dim">
-                <th className="px-3 py-2 font-normal">Type</th>
-                <th className="px-3 py-2 font-normal">Value</th>
-                {user?.is_staff && <th className="px-3 py-2 font-normal">Client</th>}
-                <th className="px-3 py-2 font-normal">Alerts</th>
-                <th className="px-3 py-2 font-normal">First seen</th>
-                <th className="px-3 py-2 font-normal">Last seen</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Type</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Value</th>
+                {user?.is_staff && <th className="px-3 py-1.5 text-xs font-medium">Client</th>}
+                <th className="px-3 py-1.5 text-xs font-medium">Alerts</th>
+                <th className="px-3 py-1.5 text-xs font-medium">First seen</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Last seen</th>
               </tr>
             </thead>
             <tbody>
@@ -162,8 +162,8 @@ export function Entities() {
                         : undefined,
                     }}
                   >
-                    <td className="px-3 py-2 text-xs text-dim">{entity.type}</td>
-                    <td className="data px-3 py-2">
+                    <td className="px-3 py-1.5 text-xs text-dim">{entity.type}</td>
+                    <td className="data px-3 py-1.5">
                       {entity.value}
                       {entity.has_notes && (
                         <span
@@ -175,20 +175,20 @@ export function Entities() {
                       )}
                     </td>
                     {user?.is_staff && (
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1.5">
                         <TenantChip
                           name={entity.tenant_name}
                           colour={entity.tenant_colour}
                         />
                       </td>
                     )}
-                    <td className="data px-3 py-2 text-xs text-dim">
+                    <td className="data px-3 py-1.5 text-xs text-dim">
                       {entity.alert_count.toLocaleString()}
                     </td>
-                    <td className="data px-3 py-2 text-xs text-dim">
+                    <td className="data px-3 py-1.5 text-xs text-dim">
                       {relative(entity.first_seen)}
                     </td>
-                    <td className="data px-3 py-2 text-xs text-dim">
+                    <td className="data px-3 py-1.5 text-xs text-dim">
                       {relative(entity.last_seen)}
                     </td>
                   </tr>

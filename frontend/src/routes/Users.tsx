@@ -224,14 +224,14 @@ export function Users() {
       {users.data && users.data.length > 0 && (
         <div className="mt-4 overflow-x-auto rounded-lg border border-line">
           <table className="w-full min-w-[44rem] border-collapse text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-ink-800">
               <tr className="border-b border-line text-left text-dim">
-                <th className="px-3 py-2 font-normal">Name</th>
-                <th className="px-3 py-2 font-normal">Email</th>
-                <th className="px-3 py-2 font-normal">Role</th>
-                {isPlatformAdmin && <th className="px-3 py-2 font-normal">Client</th>}
-                <th className="px-3 py-2 font-normal">Last sign-in</th>
-                <th className="px-3 py-2 font-normal" />
+                <th className="px-3 py-1.5 text-xs font-medium">Name</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Email</th>
+                <th className="px-3 py-1.5 text-xs font-medium">Role</th>
+                {isPlatformAdmin && <th className="px-3 py-1.5 text-xs font-medium">Client</th>}
+                <th className="px-3 py-1.5 text-xs font-medium">Last sign-in</th>
+                <th className="px-3 py-1.5 text-xs font-medium" />
               </tr>
             </thead>
             <tbody>
@@ -244,21 +244,21 @@ export function Users() {
                       row.is_active ? "" : "opacity-50"
                     }`}
                   >
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       {row.full_name}
                       {self && <span className="ml-2 text-xs text-dim">you</span>}
                     </td>
-                    <td className="data px-3 py-2 text-xs text-dim">{row.email}</td>
-                    <td className="px-3 py-2 text-xs">{ROLE_LABELS[row.role]}</td>
+                    <td className="data px-3 py-1.5 text-xs text-dim">{row.email}</td>
+                    <td className="px-3 py-1.5 text-xs">{ROLE_LABELS[row.role]}</td>
                     {isPlatformAdmin && (
-                      <td className="px-3 py-2 text-xs text-dim">
+                      <td className="px-3 py-1.5 text-xs text-dim">
                         {row.tenant_name ?? "AWDTECH"}
                       </td>
                     )}
-                    <td className="data px-3 py-2 text-xs text-dim">
+                    <td className="data px-3 py-1.5 text-xs text-dim">
                       {row.last_login_at ? relative(row.last_login_at) : "never"}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-1.5 text-right">
                       <button
                         onClick={() => reset.mutate(row.id)}
                         disabled={reset.isPending}

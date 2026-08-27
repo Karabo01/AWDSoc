@@ -131,10 +131,10 @@ export function AgentDetail() {
               <tbody>
                 {alerts.data.items.map((alert) => (
                   <tr key={alert.id} className="border-b border-line last:border-b-0">
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <SeverityChip level={alert.rule_level} />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <Link
                         to={`/alerts/${alert.id}`}
                         className="transition hover:text-accent"
@@ -143,7 +143,7 @@ export function AgentDetail() {
                       </Link>
                       <span className="data ml-2 text-xs text-dim">{alert.rule_id}</span>
                     </td>
-                    <td className="data px-3 py-2 text-xs text-dim">
+                    <td className="data px-3 py-1.5 text-xs text-dim">
                       {relative(alert.timestamp)}
                     </td>
                   </tr>

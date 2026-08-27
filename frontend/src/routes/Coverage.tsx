@@ -126,13 +126,13 @@ export function Coverage() {
             ) : (
               <div className="mt-3 overflow-x-auto rounded-lg border border-line">
                 <table className="w-full min-w-[44rem] border-collapse text-sm">
-                  <thead>
+                  <thead className="sticky top-0 z-10 bg-ink-800">
                     <tr className="border-b border-line text-left text-dim">
-                      <th className="px-3 py-2 font-normal">Technique</th>
-                      <th className="px-3 py-2 font-normal">Peak level</th>
-                      <th className="px-3 py-2 font-normal">Alerts</th>
-                      <th className="px-3 py-2 font-normal">Incidents</th>
-                      <th className="px-3 py-2 font-normal">Last seen</th>
+                      <th className="px-3 py-2 text-xs font-medium">Technique</th>
+                      <th className="px-3 py-2 text-xs font-medium">Peak level</th>
+                      <th className="px-3 py-2 text-xs font-medium">Alerts</th>
+                      <th className="px-3 py-2 text-xs font-medium">Incidents</th>
+                      <th className="px-3 py-2 text-xs font-medium">Last seen</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -141,7 +141,7 @@ export function Coverage() {
                         key={technique.technique_id}
                         className="border-b border-line transition last:border-b-0 hover:bg-ink-800"
                       >
-                        <td className="data px-3 py-2">
+                        <td className="data px-3 py-1.5">
                           <a
                             href={`https://attack.mitre.org/techniques/${technique.technique_id.replace(".", "/")}/`}
                             target="_blank"
@@ -151,16 +151,16 @@ export function Coverage() {
                             {technique.technique_id}
                           </a>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1.5">
                           <SeverityChip level={technique.max_severity} />
                         </td>
-                        <td className="data px-3 py-2 text-xs text-dim">
+                        <td className="data px-3 py-1.5 text-xs text-dim">
                           {technique.alert_count.toLocaleString()}
                         </td>
-                        <td className="data px-3 py-2 text-xs text-dim">
+                        <td className="data px-3 py-1.5 text-xs text-dim">
                           {technique.incident_count}
                         </td>
-                        <td className="data px-3 py-2 text-xs text-dim">
+                        <td className="data px-3 py-1.5 text-xs text-dim">
                           {technique.last_seen ? relative(technique.last_seen) : "—"}
                         </td>
                       </tr>

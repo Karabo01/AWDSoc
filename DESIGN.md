@@ -845,7 +845,7 @@ Each milestone ends somewhere demonstrable. Do not start the next until the curr
 
 **M8 — Analyst polish.** SSE live updates, keyboard navigation, bulk actions, empty and error states, reduced-motion pass, mobile layout for the queue.
 
-> SSE rides Redis pub/sub and carries a nudge rather than data — the client refetches, so a dropped message costs a round trip instead of a missing row. `EventSource` cannot set headers, so `/incidents/stream` is the one route in the API that reads its credential from the query string; `tests/test_new_routes.py` asserts it stays the only one. The reduced-motion pass was already in `tokens.css` from M1.
+> A left navigation rail grouped General / Threat management / Configuration, a persistent command bar, and a details pane beside the queue rather than a full-page hop — the queue stays mounted, so filters, scroll and the keyboard cursor survive reading a case. Sorting is server-side against an allowlist, with a keyset cursor that carries whatever the sorted column holds. SSE rides Redis pub/sub and carries a nudge rather than data — the client refetches, so a dropped message costs a round trip instead of a missing row. `EventSource` cannot set headers, so `/incidents/stream` is the one route in the API that reads its credential from the query string; `tests/test_new_routes.py` asserts it stays the only one. The reduced-motion pass was already in `tokens.css` from M1.
 
 **v1.1 — Client access.** Client user provisioning, the client-facing queue, and the client view of comments. Deliberately after launch; the schema and roles already carry it.
 

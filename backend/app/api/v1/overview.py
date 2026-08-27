@@ -25,7 +25,15 @@ from app.deps.tenancy import TenantScope, get_tenant_scope
 from app.incidents import sla
 from app.models import Agent, Alert, Incident, Tenant, TenantSla, WazuhConnection
 from app.models.incident import OPEN_STATUSES
-from app.schemas.overview import MisgroupedAgent, Overview, TenantOverview
+from app.schemas.overview import (
+    MisgroupedAgent,
+    Overview,
+    OverviewTrend,
+    SeveritySlice,
+    StatusSlice,
+    TenantOverview,
+    TimeBucket,
+)
 from app.wazuh.sync import misgrouped_agents
 
 router = APIRouter(tags=["overview"])
@@ -199,3 +207,128 @@ async def overview(
         ]
 
     return report
+
+
+@router.get("/overview/trend", response_model=OverviewTrend)
+async def overview_trend(
+    user: CurrentUser,
+    session: Session,
+    scope: Scope,
+    days: Annotated[int, Query(ge=1, le=90)] = 7,
+) -> OverviewTrend:
+    """Time series and breakdowns for the overview charts.
+
+    Bucketed in SQL with `date_trunc` rather than in Python, so the database
+    reads each table once instead of shipping every row to be counted here.
+
+    Empty buckets are filled in afterwards. Without that a quiet weekend renders
+    as a line jumping straight from Friday to Monday, which reads as missing data
+    rather than as a quiet weekend.
+    """
+    now = datetime.now(UTC)
+    since = now - timedelta(days=days)
+    # Hourly up to two days, daily beyond. A 90-day hourly chart is 2160 points
+    # of noise; a 24-hour daily chart is one point.
+    bucket_hours = 1 if days <= 2 else 24
+    unit = "hour" if bucket_hours == 1 else "day"
+
+    if scope.tenant_id is not None:
+        visible: list[uuid.UUID] | None = [scope.tenant_id]
+    else:
+        visible = await accessible_tenant_ids(session, user)
+
+    trend = OverviewTrend(since=since, bucket_hours=bucket_hours)
+    if visible is not None and not visible:
+        return trend
+
+    def scoped(stmt, column):
+        return stmt if visible is None else stmt.where(column.in_(visible))
+
+    bucket = _bucket(unit, Incident.created_at).label("at")
+    incident_rows = await session.execute(
+        scoped(
+            select(
+                bucket,
+                func.count().label("incidents"),
+                func.count().filter(Incident.severity >= CRITICAL).label("critical"),
+            ).where(Incident.created_at >= since),
+            Incident.tenant_id,
+        ).group_by(bucket)
+    )
+
+    alert_bucket = _bucket(unit, Alert.timestamp).label("at")
+    alert_rows = await session.execute(
+        scoped(
+            select(alert_bucket, func.count().label("alerts")).where(
+                Alert.timestamp >= since
+            ),
+            Alert.tenant_id,
+        ).group_by(alert_bucket)
+    )
+
+    points: dict[datetime, TimeBucket] = {}
+
+    def at(key: datetime) -> TimeBucket:
+        # Postgres returns these already truncated and tz-aware; normalising here
+        # keeps the two queries' keys comparable.
+        return points.setdefault(key, TimeBucket(at=key))
+
+    for row in incident_rows.all():
+        point = at(row.at)
+        point.incidents = row.incidents
+        point.critical = row.critical
+    for row in alert_rows.all():
+        at(row.at).alerts = row.alerts
+
+    # Fill the gaps so the axis is continuous.
+    step = timedelta(hours=bucket_hours)
+    cursor = _floor(since, unit)
+    end = _floor(now, unit)
+    while cursor <= end:
+        at(cursor)
+        cursor += step
+
+    trend.buckets = sorted(points.values(), key=lambda point: point.at)
+
+    # Breakdowns are over *open* incidents, not the window: an analyst reading
+    # "12 high" wants to know what is on the board now, not what was opened.
+    open_rows = await session.execute(
+        scoped(
+            select(Incident.severity, Incident.status).where(
+                Incident.status.in_(OPEN_STATUSES)
+            ),
+            Incident.tenant_id,
+        )
+    )
+    bands = {13: 0, 10: 0, 7: 0, 0: 0}
+    statuses: dict[str, int] = {}
+    for severity, incident_status in open_rows.all():
+        floor = next(f for f in (13, 10, 7, 0) if severity >= f)
+        bands[floor] += 1
+        statuses[incident_status] = statuses.get(incident_status, 0) + 1
+
+    trend.by_severity = [
+        SeveritySlice(label=label, severity_min=floor, count=bands[floor])
+        for floor, label in ((13, "Critical"), (10, "High"), (7, "Medium"), (0, "Low"))
+    ]
+    trend.by_status = [
+        StatusSlice(status=name, count=count) for name, count in sorted(statuses.items())
+    ]
+    return trend
+
+
+def _bucket(unit: str, column):
+    """Truncate in UTC, explicitly.
+
+    Bare `date_trunc` buckets in the *session* timezone. On a database that is
+    not UTC the buckets would be offset from the ones this module fills the gaps
+    with, and every point would be duplicated an hour or two apart. Converting in
+    and back out pins it regardless of how the server is configured.
+    """
+    return func.timezone("UTC", func.date_trunc(unit, func.timezone("UTC", column)))
+
+
+def _floor(value: datetime, unit: str) -> datetime:
+    if unit == "day":
+        return value.replace(hour=0, minute=0, second=0, microsecond=0)
+    return value.replace(minute=0, second=0, microsecond=0)

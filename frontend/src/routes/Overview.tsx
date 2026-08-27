@@ -1,12 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
+import { Suspense, lazy } from "react";
 import { Link } from "react-router-dom";
 
 import { rootGet } from "@/api/client";
-import { getOverview } from "@/api/overview";
+import { getOverview, getTrend } from "@/api/overview";
 import type { Health } from "@/api/types";
 import { Empty, ErrorNote, Freshness, Loading, relative } from "@/components/States";
 import { TenantChip } from "@/components/TenantChip";
 import { useAuth } from "@/hooks/useAuth";
+
+/** Charting is ~400 kB of the bundle and only this page uses it. Splitting it
+ *  out keeps the queue - the page an analyst actually opens first and leaves
+ *  open - from paying for a library it never renders. */
+const TrendCharts = lazy(() =>
+  import("@/components/TrendCharts").then((m) => ({ default: m.TrendCharts })),
+);
 
 function Tile({
   label,
@@ -56,6 +64,12 @@ export function Overview() {
     queryKey: ["health"],
     queryFn: () => rootGet<Health>("/api/healthz"),
     refetchInterval: 30_000,
+  });
+
+  const trend = useQuery({
+    queryKey: ["overview-trend"],
+    queryFn: () => getTrend(7),
+    refetchInterval: 300_000,
   });
 
   const data = overview.data;
@@ -162,6 +176,14 @@ export function Overview() {
         </div>
       )}
 
+      {trend.data && trend.data.buckets.length > 0 && (
+        <Suspense
+          fallback={<div className="mt-6 h-44 rounded-lg border border-line bg-ink-800" />}
+        >
+          <TrendCharts trend={trend.data} />
+        </Suspense>
+      )}
+
       {data && data.tenants.length === 0 && (
         <Empty
           title="No clients yet."
@@ -182,17 +204,17 @@ export function Overview() {
       {data && data.tenants.length > 0 && (
         <div className="mt-8 overflow-x-auto rounded-lg border border-line">
           <table className="w-full min-w-[52rem] border-collapse text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-ink-800">
               <tr className="border-b border-line text-left text-dim">
-                <th className="px-3 py-2 font-normal">
+                <th className="px-3 py-2 text-xs font-medium">
                   {data.scope === "fleet" ? "Client" : "Environment"}
                 </th>
-                <th className="px-3 py-2 font-normal">Open</th>
-                <th className="px-3 py-2 font-normal">Breached</th>
-                <th className="px-3 py-2 font-normal">Awaiting client</th>
-                <th className="px-3 py-2 font-normal">Alerts 24h</th>
-                <th className="px-3 py-2 font-normal">Agents</th>
-                <th className="px-3 py-2 font-normal">Health</th>
+                <th className="px-3 py-2 text-xs font-medium">Open</th>
+                <th className="px-3 py-2 text-xs font-medium">Breached</th>
+                <th className="px-3 py-2 text-xs font-medium">Awaiting client</th>
+                <th className="px-3 py-2 text-xs font-medium">Alerts 24h</th>
+                <th className="px-3 py-2 text-xs font-medium">Agents</th>
+                <th className="px-3 py-2 text-xs font-medium">Health</th>
               </tr>
             </thead>
             <tbody>
@@ -202,13 +224,13 @@ export function Overview() {
                   className="border-b border-line last:border-b-0"
                   style={{ boxShadow: `inset 3px 0 0 ${tenant.colour ?? "transparent"}` }}
                 >
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-1.5">
                     <TenantChip name={tenant.name} colour={tenant.colour} />
                     {tenant.status !== "active" && (
                       <span className="ml-2 text-xs text-dim">{tenant.status}</span>
                     )}
                   </td>
-                  <td className="data px-3 py-2 text-xs">
+                  <td className="data px-3 py-1.5 text-xs">
                     {tenant.open_incidents}
                     {tenant.unassigned_incidents > 0 && (
                       <span className="ml-1 text-dim">
@@ -216,7 +238,7 @@ export function Overview() {
                       </span>
                     )}
                   </td>
-                  <td className="data px-3 py-2 text-xs">
+                  <td className="data px-3 py-1.5 text-xs">
                     {tenant.response_breached > 0 ? (
                       <span className="text-[color:var(--sev-crit)]">
                         {tenant.response_breached}
@@ -229,13 +251,13 @@ export function Overview() {
                       <span className="text-dim">0</span>
                     )}
                   </td>
-                  <td className="data px-3 py-2 text-xs text-dim">
+                  <td className="data px-3 py-1.5 text-xs text-dim">
                     {tenant.awaiting_client || "—"}
                   </td>
-                  <td className="data px-3 py-2 text-xs text-dim">
+                  <td className="data px-3 py-1.5 text-xs text-dim">
                     {tenant.alerts_24h.toLocaleString()}
                   </td>
-                  <td className="data px-3 py-2 text-xs text-dim">
+                  <td className="data px-3 py-1.5 text-xs text-dim">
                     {tenant.has_connection ? (
                       <>
                         {tenant.agents_active}/{tenant.agents_total}
@@ -249,7 +271,7 @@ export function Overview() {
                       "—"
                     )}
                   </td>
-                  <td className="px-3 py-2 text-xs">
+                  <td className="px-3 py-1.5 text-xs">
                     {tenant.silent ? (
                       <span className="text-[color:var(--sev-med)]">
                         {tenant.last_alert_at
