@@ -154,22 +154,40 @@ Environment: everything in `backend/.env.example`, with
 
 ## 5. `worker`
 
-Same repository and build context as `api` — the same image, a different
-command.
+Same repository and build context as `api` - the same image, a different role.
 
 | Setting | Value |
 |---|---|
-| Command override | `arq app.workers.consumer.WorkerSettings` |
+| `APP_ROLE` env var | `worker` |
 | Domain | none |
 | Port | none |
 | Pre-deploy command | **none** |
 
-Same environment as `api`. The worker must never run migrations: two containers
-racing `alembic upgrade head` will deadlock.
+Everything else in the environment matches `api` exactly, including
+`DATABASE_URL`, `REDIS_URL`, `ENCRYPTION_KEY` and `JWT_SECRET`.
+
+**The role is an environment variable, not a start-command override.** Coolify
+applies custom start commands inconsistently to Dockerfile builds, and the
+failure is silent: the worker boots as a second copy of the API, the stack
+reports healthy, ingest returns `202`, and nothing ever writes an alert to
+Postgres. `APP_ROLE` cannot be applied halfway.
+
+Confirm after deploying - the logs must show arq, not uvicorn:
+
+```bash
+docker logs --tail 20 <worker-container>
+```
+
+`Uvicorn running on http://0.0.0.0:8000` there means `APP_ROLE` did not reach the
+container. arq logs its function list and the ingest consumer announces itself
+with `ingest consumer ... started`.
 
 The worker is not optional. It runs the ingest consumer, so with it stopped
 alerts buffer in Redis up to `INGEST_STREAM_MAXLEN` and then the oldest are
 dropped. It also runs partition maintenance and reprocess jobs.
+
+The worker must never run migrations: two containers racing
+`alembic upgrade head` will deadlock.
 
 ## 6. `web`
 

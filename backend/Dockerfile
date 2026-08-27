@@ -21,10 +21,14 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
+
 RUN useradd --system --uid 10001 awdsoc && chown -R awdsoc /app
 USER awdsoc
 
 EXPOSE 8000
 
-# Overridden to `arq app.workers.consumer.WorkerSettings` on the worker resource.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# Role is selected by APP_ROLE, defaulting to api. See docker-entrypoint.sh
+# for why this is an env var rather than a command override.
+CMD ["docker-entrypoint.sh"]
