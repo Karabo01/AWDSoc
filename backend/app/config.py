@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     encryption_key: str = ""
     encryption_key_version: int = 1
 
+    # First-run administrator, so a fresh deployment needs no shell. Only ever
+    # applied when the users table is empty; remove these after signing in.
+    bootstrap_admin_email: str = ""
+    bootstrap_admin_password: str = ""
+    bootstrap_admin_name: str = "Platform Admin"
+
     ingest_max_skew_seconds: int = 300
     ingest_rate_limit_per_tenant: str = "500/second"
     # A single request may carry one alert object or an array. The array form

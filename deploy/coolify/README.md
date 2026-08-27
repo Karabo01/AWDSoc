@@ -187,11 +187,37 @@ Repository resource, build context `/frontend`.
 
 ## 8. First user
 
-From a terminal on the `api` container:
+Set these on the `api` resource **before the first deploy** and it creates
+itself, no shell required:
+
+```
+BOOTSTRAP_ADMIN_EMAIL=you@awdtech.co.za
+BOOTSTRAP_ADMIN_PASSWORD=           # blank generates one
+```
+
+Leave the password blank and one is generated and written **once** to the `api`
+logs - search them for `bootstrap password`. This only runs when the users table
+is empty, so it is inert on every later deploy and cannot alter an existing
+account.
+
+**Remove both variables once you have signed in.** Nothing consumes them again,
+and a password sitting in the environment is a standing risk.
+
+If the app is already deployed, or you would rather not put it in the
+environment, create it by hand. Coolify's web terminal rides a websocket that
+drops often - SSH to the host and go around it:
 
 ```bash
-python -m app.cli create-user --email you@awdtech.co.za \
-  --name "Your Name" --role platform_admin
+docker ps --format '{{.Names}}'
+docker exec -it <api-container> python -m app.cli create-user \
+  --email you@awdtech.co.za --name "Your Name" --role platform_admin
+```
+
+That same route is the reliable way to reach `psql` and `redis-cli`:
+
+```bash
+docker exec -it <postgres-container> psql -U awdsoc -d postgres
+docker exec -it <redis-container> redis-cli -a '<password>' ping
 ```
 
 ## 9. Verify before onboarding anyone
