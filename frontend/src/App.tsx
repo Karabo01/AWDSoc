@@ -1,0 +1,75 @@
+import { useEffect } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+
+import { onSessionEnded } from "@/api/client";
+import { AppShell } from "@/components/AppShell";
+import { RequireAuth } from "@/components/RequireAuth";
+import { useAuth } from "@/hooks/useAuth";
+import { Login } from "@/routes/Login";
+import { Overview } from "@/routes/Overview";
+import { Placeholder } from "@/routes/Placeholder";
+
+export function App() {
+  const restore = useAuth((s) => s.restore);
+
+  useEffect(() => {
+    void restore();
+    onSessionEnded(() => {
+      useAuth.setState({ user: null, status: "anonymous" });
+    });
+  }, [restore]);
+
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route
+        element={
+          <RequireAuth>
+            <AppShell />
+          </RequireAuth>
+        }
+      >
+        <Route path="/" element={<Overview />} />
+        <Route
+          path="/incidents"
+          element={<Placeholder title="Incidents" milestone="M5" />}
+        />
+        <Route path="/alerts" element={<Placeholder title="Alerts" milestone="M4" />} />
+        <Route
+          path="/entities"
+          element={<Placeholder title="Entities" milestone="M6" />}
+        />
+        <Route path="/agents" element={<Placeholder title="Agents" milestone="M7" />} />
+        <Route
+          path="/coverage"
+          element={<Placeholder title="MITRE coverage" milestone="M7" />}
+        />
+        <Route
+          path="/settings/tenants"
+          element={
+            <RequireAuth roles={["platform_admin"]}>
+              <Placeholder title="Clients" milestone="M2" />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/settings/users"
+          element={
+            <RequireAuth roles={["platform_admin", "client_admin"]}>
+              <Placeholder title="Users" milestone="M8" />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/settings/audit"
+          element={
+            <RequireAuth roles={["platform_admin", "client_admin"]}>
+              <Placeholder title="Audit log" milestone="M5" />
+            </RequireAuth>
+          }
+        />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

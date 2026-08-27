@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark-first. Deep blue-grey ink rather than black: pure black with bright
+   accents causes halation over an eight-hour shift. */
+:root {
+  --ink-900: #0d131e; /* page */
+  --ink-800: #141c2a; /* surface */
+  --ink-700: #1c2637; /* raised surface */
+  --line: #26314a; /* hairline borders */
+  --text: #e2e7f0;
+  --text-dim: #8792a8;
+  --accent: #e0a32e; /* interactive, focus rings, active nav */
+
+  /* Severity is the Wazuh rule level on a continuous 0-15 ramp, never a
+     three-tier badge. Collapsing 15 levels discards what the ruleset asserts. */
+  --sev-low: var(--text-dim);
+  --sev-med: #e0a32e;
+  --sev-high: #e8743b;
+  --sev-crit: #e0435f;
+
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--ink-900);
+  color: var(--text);
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Machine output should look like machine output. */
+.data {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  font-variant-ligatures: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
