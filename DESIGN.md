@@ -28,7 +28,7 @@ This is a standalone product. It shares no code, schema, or auth with any other 
 | Entity extraction and pivoting | `related.*` arrays drive entity pages |
 | Incident grouping and case management | Status, severity, assignment, timeline, comments |
 | Cross-tenant analyst queue | The core MSSP surface |
-| Client-facing read access | Clients log in and see their own incidents |
+| Incident SLA | Per-tenant response and resolution targets by severity, counted down in the queue, paused while awaiting client feedback |
 | Agent inventory | Read-through to each tenant's Wazuh Manager API |
 | MITRE ATT&CK coverage | Derived from `rule.mitre.*` on observed alerts |
 | Audit log | Every state change on an incident |
@@ -40,6 +40,7 @@ This is a standalone product. It shares no code, schema, or auth with any other 
 - **SOAR / playbooks.** v2. Design the incident model so actions can attach later; build none of it now.
 - **Workbooks / custom dashboards.** One fixed overview page.
 - **Billing and metering.** Track alert volume per tenant so it can be billed later, but build no billing.
+- **Client login.** **Decided:** v1 is staff-only. Clients get reports; only AWDTECH analysts sign in. The four roles, `staff_tenant_access`, and `incident_comments.visibility` all stay in the schema and are already built, so client access is additive work in v1.1 rather than a refactor. Nothing in v1 may assume the reader is staff — the queue renders without the tenant chip for a client token, and `client_viewer` must never receive an internal comment. Those paths ship untested by real users, so keep the isolation tests honest.
 
 Aggregation detections (brute force, low-and-slow, impossible travel) live in each tenant's Wazuh ruleset as `frequency` / `timeframe` / `if_matched_sid` rules. That is the deliberate consequence of real-time-only evaluation. The console consumes their output like any other alert.
 
@@ -75,10 +76,15 @@ Aggregation detections (brute force, low-and-slow, impossible travel) live in ea
 
 | Topology | When | How |
 |---|---|---|
-| **Dedicated manager** | Client owns their Wazuh, or AWDTECH runs a per-client instance | One `<integration>` block posting to that tenant's ingest URL |
-| **Shared manager** | AWDTECH runs one manager serving several small clients | One `<integration>` block *per tenant*, each with a `<group>` filter matching that client's agent group, each posting to its own tenant URL |
+| **Shared manager** — **the default** | AWDTECH runs one manager serving several clients | One `<integration>` block *per tenant*, each with a `<group>` filter matching that client's agent group, each posting to its own tenant URL |
+| **Dedicated manager** | Client owns their Wazuh, brings compliance requirements, or outgrows the shared manager | One `<integration>` block posting to that tenant's ingest URL |
 
 The Wazuh integrator's `<group>` filter is what makes the shared case work without any routing logic in the console. Ingest is always addressed to a specific tenant by URL; the console never has to infer tenancy from alert content.
+
+**Decided: shared is the default for the first cohort**, on cost — a Wazuh indexer per client is the largest infrastructure line, and the console supports both topologies either way, so this is a runbook decision rather than a code one. It carries two obligations that dedicated would have given for free:
+
+1. **Every aggregation rule must be group-scoped.** `frequency` / `timeframe` / `if_matched_sid` rules on a shared manager count over the whole manager's event stream. A brute-force rule that does not constrain itself to one agent group correlates across clients and fires on traffic the tenant never saw. Scope each rule to its group and test it per tenant; a rule that cannot be scoped belongs on a dedicated manager.
+2. **A mis-grouped agent is a cross-tenant leak, and it happens upstream of every ingest protection.** The `<group>` filter decides which tenant's URL an alert is posted to, so an agent in the wrong group produces alerts that are correctly signed, correctly tenanted by URL, and attributed to the wrong client. The console cannot catch this at ingest. It can catch it on agent sync (M7): agent IDs are unique within a manager, so the same `agent_id` appearing under two tenants that share a `base_url` is a misgrouping. Flag it on the overview and refuse to silently accept it.
 
 ### Stack
 
@@ -274,6 +280,16 @@ create table incidents (
   fingerprint   text not null,
   first_seen    timestamptz not null,
   last_seen     timestamptz not null,
+
+  -- SLA. Deadlines are absolute timestamps that get pushed forward each time
+  -- the clock is paused, so they stay indexable and the queue can simply order
+  -- by them. A closed case keeps the clock it was actually judged under.
+  sla_respond_by     timestamptz,
+  sla_resolve_by     timestamptz,
+  sla_paused_at      timestamptz,          -- non-null while the clock is stopped
+  sla_paused_seconds integer not null default 0,
+  first_response_at  timestamptz,
+
   alert_count   integer not null default 0,
   rule_summary  jsonb not null default '{}', -- {rule_id: count}
   evidence      jsonb not null default '{}', -- see below
@@ -290,7 +306,36 @@ create index on incidents (status, last_seen desc);   -- cross-tenant staff queu
 create index on incidents (tenant_id, assignee_id, status);
 create unique index on incidents (tenant_id, fingerprint)
   where status in ('new','active','pending');
+-- Drives the breach-imminent queue ordering, cross-tenant. A paused incident is
+-- not ticking and must not appear in it.
+create index on incidents (sla_respond_by)
+  where first_response_at is null and sla_paused_at is null
+    and status in ('new','active','pending');
+create index on incidents (sla_resolve_by)
+  where sla_paused_at is null and status in ('new','active','pending');
+
+-- Contractual response times, per tenant, by severity band. The row with the
+-- highest severity_min not exceeding the incident's severity wins.
+create table tenant_slas (
+  tenant_id       uuid not null references tenants(id) on delete cascade,
+  severity_min    smallint not null,     -- 0-15, on the Wazuh rule level ramp
+  respond_minutes integer not null,
+  resolve_minutes integer not null,
+  primary key (tenant_id, severity_min)
+);
 ```
+
+**The SLA clock.** Five rules, because the ambiguous cases are where this gets argued with a client later:
+
+- **It starts at `first_seen`**, not at incident creation. The client's exposure began when the alert fired, and on a busy manager those differ.
+- **`first_response_at` is stamped once**, by whichever comes first: a status change out of `new`, an assignment, or a comment. Opening a case is not a response; doing something to it is.
+- **The clock stops in `pending`.** **Decided:** `pending` means *awaiting client feedback*, and contractual time does not run while AWDTECH is blocked on the client. Rather than accumulate elapsed time, push the deadlines forward — on entering `pending` set `sla_paused_at = now()`; on leaving it, add `now() - sla_paused_at` to both `sla_respond_by` and `sla_resolve_by`, add the same delta to `sla_paused_seconds`, and null `sla_paused_at`. The deadlines stay absolute timestamps, so the queue still orders by a single indexed column and the countdown is still a subtraction.
+- **Rising severity re-tightens the clock, but only until it is answered.** Severity is the max rule level across members, so an incident can escalate as alerts attach. On any severity increase while `first_response_at` is null, recompute `sla_respond_by = first_seen + new_target + sla_paused_seconds` — the accumulator is what keeps a re-tightened deadline from silently clawing back time the client already held. Once `first_response_at` is set, both deadlines freeze.
+- **Every pause is auditable, because every pause is billable.** A paused clock cannot breach, so parking a case in `pending` is the one status change with money attached to it. Write both transitions to `audit_log`, show total held time on the case view (`sla_paused_seconds`), and expect to be asked to justify it. Do not let an incident enter `pending` without a client-visible comment — if nobody asked the client anything, the console is not waiting on them.
+
+Breach is derived, never stored. While the clock runs, an incident is in response breach when `sla_respond_by` has passed with `first_response_at` still null, and in resolution breach when `sla_resolve_by` has passed while open. While paused, both deadlines and `sla_paused_at` are frozen, so the test is `sla_paused_at > sla_respond_by` — it had already breached before the pause, and a pause cannot un-breach it. For a closed case, compare `first_response_at` and `closed_at` against the deadlines as they stood. Storing a breach flag means a worker sweep that can lag, and a lagging breach flag is worse than none. A tenant with no `tenant_slas` rows has no SLA: the deadline columns stay null and the queue shows no countdown.
+
+One consequence to watch: narrowing `pending` to *awaiting client* leaves no waiting state whose clock keeps running. If analysts need to park a case on a vendor, a maintenance window, or an internal dependency, that is a **new status** rather than a reuse of `pending` — and it is a check-constraint migration, so decide it before M5 rather than discovering it in triage.
 
 **`evidence` is what makes 90-day retention survivable.** When an alert attaches to an incident, write a trimmed snapshot into `evidence`: the first alert's normalised ECS, the most recent one, and the entity set. Member alerts vanish at 90 days; a resolved case from four months ago must still show what it was about. Cap the snapshot at 32 KB and never store the full `raw`.
 
@@ -538,6 +583,8 @@ POST   /tenants                          creates tenant + ingest secret + connec
 PATCH  /tenants/{id}
 POST   /tenants/{id}/rotate-secret       returns the new secret once, never again
 POST   /tenants/{id}/test-connection     validates Manager API reachability
+GET    /tenants/{id}/sla                 severity bands and response targets
+PUT    /tenants/{id}/sla                 platform_admin; replaces the whole policy
 
 GET    /audit                            platform_admin, or client_admin for own tenant
 POST   /admin/reprocess                  platform_admin; body {tenant_id?, from, to}
@@ -583,7 +630,7 @@ Enforce with a FastAPI dependency, not with checks scattered through handlers.
 
 ### The cross-tenant queue is the product
 
-Everything else is secondary. For a staff user it must support: an "All clients" mode alongside per-tenant, a visible tenant chip on every row, filter by status and severity without a page reload, keyboard navigation (`j`/`k` move, `Enter` open, `a` assign to self, `r` resolve), bulk selection, and a live count that does not reorder the list under the analyst's cursor.
+Everything else is secondary. For a staff user it must support: an "All clients" mode alongside per-tenant, a visible tenant chip on every row, filter by status and severity without a page reload, keyboard navigation (`j`/`k` move, `Enter` open, `a` assign to self, `r` resolve), bulk selection, and a live count that does not reorder the list under the analyst's cursor. Where a tenant has an SLA, each row carries a countdown to the nearest deadline, and a paused clock reads as a quiet "Paused" chip rather than a frozen timer — a stopped countdown that looks like a running one is how an analyst misses a case that came back.
 
 New incidents arriving over SSE go into a "3 new incidents" pill at the top that the analyst clicks to merge in. Never auto-insert into a list someone is reading.
 
@@ -720,7 +767,7 @@ Ship it at `deploy/wazuh/custom-awd-console` with an installer that takes the sl
 
 ### Known limit
 
-Fork-per-alert caps sustained throughput in the low hundreds of alerts per second per manager, and the level 7 floor keeps normal operation well under it. If a storm exceeds it, that manager slows — a detection-engine problem, not a console problem. The v2 answer is a sidecar that tails `alerts.json` and batches. Do not build it pre-emptively, but **make the ingest endpoint accept either a single alert object or an array from day one** so the sidecar can arrive without an API change.
+Fork-per-alert caps sustained throughput in the low hundreds of alerts per second per manager, and the level 7 floor keeps normal operation well under it. **On a shared manager that ceiling is shared too.** The console's per-tenant ingest rate limit protects the console, not the manager: one client's storm forks against the same process table as everyone else's alerts, and the tenants sharing that manager slow down together. This is the cost of the shared default, and it is the signal to move a noisy client onto a dedicated manager. If a storm exceeds it, that manager slows — a detection-engine problem, not a console problem. The v2 answer is a sidecar that tails `alerts.json` and batches. Do not build it pre-emptively, but **make the ingest endpoint accept either a single alert object or an array from day one** so the sidecar can arrive without an API change.
 
 ---
 
@@ -774,19 +821,21 @@ Each milestone ends somewhere demonstrable. Do not start the next until the curr
 
 **M1 — Skeleton.** FastAPI, Postgres with the full schema and partitioning, Alembic, JWT auth with all four roles, staff tenant switching, `/healthz`. React shell with login, protected routing, tenant switcher in the header. Deployed to Coolify over HTTPS.
 
-**M2 — Tenant onboarding.** Tenant CRUD, secret generation and rotation, encrypted Wazuh credential storage, `test-connection`. The installer script for the manager side. Success criterion: onboarding a client is a form plus one command on their manager.
+**M2 — Tenant onboarding.** Tenant CRUD, secret generation and rotation, encrypted Wazuh credential storage, `test-connection`, per-tenant SLA policy. The installer script for the manager side, defaulting to the shared-manager runbook: create the agent group, add the tenant's `<integration>` block with its `<group>` filter, verify no existing agent moved groups. Success criterion: onboarding a client is a form plus one command on the shared manager.
 
 **M3 — Ingest.** Per-tenant webhook with HMAC, timestamp, and CIDR enforcement, uniform failure timing, per-tenant rate limiting. Redis stream producer, worker consumer writing raw alerts with `ecs = {}`. Success criterion: a real alert from a real client manager lands in Postgres, correctly tenanted.
 
 **M4 — Normalisation.** YAML map engine, `related.*` extraction, `map_version`, replay endpoint. Alert list and inspector showing raw and normalised side by side. Fixture corpus captured from live managers — Windows security, syscheck, O365, FortiGate at minimum.
 
-**M5 — Incidents.** Fingerprinting, grouping, entity upsert, evidence snapshots, the cross-tenant queue, case view, comments with visibility, status transitions, audit log. This is where it becomes a product.
+**M5 — Incidents.** Fingerprinting, grouping, entity upsert, evidence snapshots, the cross-tenant queue, case view, comments with visibility, status transitions, audit log. SLA clock: deadlines on creation, `first_response_at` stamping, pause and resume across `pending`, recompute on escalation, breach derived in the queue query and surfaced as a countdown. This is where it becomes a product.
 
 **M6 — Entities.** Entity index, entity page, pivots against the GIN indexes. Verify query plans on a partitioned table with at least a million rows before calling it done.
 
 **M7 — Manager integration.** Per-tenant agent sync worker, agent pages, rule read-through, MITRE coverage, fleet overview with per-tenant health.
 
-**M8 — Client access and polish.** Client user provisioning, client-facing queue, SSE live updates, keyboard navigation, bulk actions, empty and error states, reduced-motion pass, mobile layout for the queue.
+**M8 — Analyst polish.** SSE live updates, keyboard navigation, bulk actions, empty and error states, reduced-motion pass, mobile layout for the queue.
+
+**v1.1 — Client access.** Client user provisioning, the client-facing queue, and the client view of comments. Deliberately after launch; the schema and roles already carry it.
 
 ---
 
@@ -803,11 +852,13 @@ Each milestone ends somewhere demonstrable. Do not start the next until the curr
 
 ## 14. Open decisions
 
-Resolved: standalone product (not part of any existing platform); static egress IP available, so IP allowlisting with no VPN sidecar; AWDTECH MSSP, multi-tenant, public-facing; 90-day alert retention.
+All four are now resolved. Do not re-litigate.
 
-Still open — ask before choosing:
+**Resolved earlier:** standalone product (not part of any existing platform); static egress IP available, so IP allowlisting with no VPN sidecar; AWDTECH MSSP, multi-tenant, public-facing; 90-day alert retention.
 
-1. **Per-client topology.** For the first cohort, does each client get a dedicated Wazuh manager, or does AWDTECH run a shared manager with agent groups? Both are supported, but the first onboarding runbook should document one of them as the default.
-2. **Client login at launch.** Does v1 ship with client-facing access (M8), or do clients get reports and only AWDTECH staff use the console? Cutting it removes two roles and the comment visibility model.
-3. **Incident SLA.** Do tenants have contractual response times that the queue should surface and count down against? If yes it belongs in the incident model now, not bolted on later.
-4. **Console hostname.** One shared domain for all clients, or a per-tenant subdomain? Shared is simpler and assumed throughout; per-tenant changes the auth and TLS story.
+**Resolved 2026-08-27:**
+
+1. **Per-client topology — shared manager with agent groups, as the default.** One AWDTECH-run manager per cohort, one `<integration>` block per tenant filtered by that client's agent group. Chosen on cost: a Wazuh indexer per client is the largest infrastructure line. Dedicated managers remain fully supported for clients who own their Wazuh, carry compliance requirements, or grow noisy enough to threaten the shared fork-per-alert ceiling. See §2 for the two obligations this creates — group-scoped aggregation rules, and agent-group validation on sync — and §10 for the shared throughput ceiling.
+2. **Client login — staff-only at launch.** Clients get reports; AWDTECH analysts use the console. The roles, `staff_tenant_access`, and comment visibility stay in the schema and are already built, so client access is additive work in v1.1. This removes nothing from M1.
+3. **Incident SLA — full, from M5, and the clock stops while awaiting client feedback.** Per-tenant contractual response and resolution targets by severity band in `tenant_slas`; deadlines stored on the incident as absolute timestamps and pushed forward on resume; `sla_paused_seconds` accumulated for reporting; breach derived, never stored; countdown in the queue. `pending` now means specifically *awaiting client feedback* — see §4 for the five clock rules, and for the one loose end this creates: there is no longer a waiting state whose clock keeps running, and adding one is a check-constraint migration best done before M5.
+4. **Console hostname — one shared domain for all clients.** Per-tenant subdomains buy nothing here: tenancy is carried in the token, so a subdomain adds wildcard TLS and per-tenant cookie scoping without adding isolation.

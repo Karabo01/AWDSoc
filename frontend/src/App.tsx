@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Login } from "@/routes/Login";
 import { Overview } from "@/routes/Overview";
 import { Placeholder } from "@/routes/Placeholder";
+import { Tenants } from "@/routes/Tenants";
 
 export function App() {
   const restore = useAuth((s) => s.restore);
@@ -48,7 +49,7 @@ export function App() {
           path="/settings/tenants"
           element={
             <RequireAuth roles={["platform_admin"]}>
-              <Placeholder title="Clients" milestone="M2" />
+              <Tenants />
             </RequireAuth>
           }
         />

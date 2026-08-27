@@ -12,6 +12,9 @@ const NAV = [
   { to: "/coverage", label: "Coverage", end: false },
 ];
 
+// platform_admin only; client-facing roles never see tenant management.
+const ADMIN_NAV = [{ to: "/settings/tenants", label: "Clients", end: false }];
+
 export function AppShell() {
   const { user, signOut } = useAuth();
 
@@ -21,7 +24,7 @@ export function AppShell() {
         <span className="text-sm font-semibold tracking-tight">AWDTECH SOC</span>
 
         <nav className="flex items-center gap-1">
-          {NAV.map((item) => (
+          {[...NAV, ...(user?.role === "platform_admin" ? ADMIN_NAV : [])].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

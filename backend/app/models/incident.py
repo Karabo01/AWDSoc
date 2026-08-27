@@ -60,6 +60,16 @@ class Incident(Base):
         UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="SET NULL")
     )
 
+    # SLA. Deadlines are absolute and pushed forward on resume; `sla_paused_at`
+    # is non-null exactly while the clock is stopped awaiting the client.
+    sla_respond_by: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sla_resolve_by: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sla_paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sla_paused_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    first_response_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

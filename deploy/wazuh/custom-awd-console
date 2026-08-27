@@ -1,0 +1,128 @@
+#!/var/ossec/framework/python/bin/python3
+"""AWDTECH SOC Console integrator.
+
+Invoked by the Wazuh integrator once per alert:
+
+    custom-awd-console <alert_file> <api_key> <hook_url>
+
+THE ONE RULE: this script must never block and never raise. The integrator forks
+a process per alert, so a hung script becomes a fork bomb on the client's
+manager, and a crashing one fills their logs with tracebacks during exactly the
+incident you need them to be reading. Every failure path here ends in exit 0.
+
+Standard library only. It runs against the Python that ships inside
+/var/ossec/framework, which has no site-packages you can rely on.
+"""
+
+import hashlib
+import hmac
+import json
+import sys
+import time
+import urllib.error
+import urllib.request
+
+TIMEOUT_SECONDS = 5
+ATTEMPTS = 3          # one try plus two retries
+BACKOFF_SECONDS = 1.0  # doubled each retry
+LOG_PATH = "/var/ossec/logs/integrations.log"
+
+
+def log(message):
+    """Best-effort. If we cannot even log, that is not worth dying over."""
+    try:
+        with open(LOG_PATH, "a") as handle:
+            handle.write(
+                "%s awd-console: %s\n"
+                % (time.strftime("%Y/%m/%d %H:%M:%S"), message)
+            )
+    except Exception:
+        pass
+
+
+def sign(secret, timestamp, payload):
+    """HMAC-SHA256 over "<timestamp>.<body>", hex.
+
+    The timestamp is inside the signed material so a captured body cannot be
+    replayed with a fresh header.
+    """
+    material = ("%s.%s" % (timestamp, payload)).encode("utf-8")
+    return hmac.new(secret.encode("utf-8"), material, hashlib.sha256).hexdigest()
+
+
+def post(hook_url, secret, payload):
+    timestamp = str(int(time.time()))
+    body = payload.encode("utf-8")
+    request = urllib.request.Request(hook_url, data=body, method="POST")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("X-AWD-Timestamp", timestamp)
+    request.add_header("X-AWD-Signature", "sha256=" + sign(secret, timestamp, payload))
+
+    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+        return response.status
+
+
+def deliver(hook_url, secret, payload):
+    delay = BACKOFF_SECONDS
+    for attempt in range(1, ATTEMPTS + 1):
+        try:
+            status = post(hook_url, secret, payload)
+            if 200 <= status < 300:
+                return True
+            # 4xx is our fault and will not fix itself: a bad signature, a stale
+            # clock, an unknown slug, or an IP that is not allowlisted. Retrying
+            # just burns forks.
+            if 400 <= status < 500:
+                log("giving up: console returned HTTP %s" % status)
+                return False
+            log("console returned HTTP %s (attempt %s)" % (status, attempt))
+        except urllib.error.HTTPError as exc:
+            if 400 <= exc.code < 500:
+                log("giving up: console returned HTTP %s" % exc.code)
+                return False
+            log("console returned HTTP %s (attempt %s)" % (exc.code, attempt))
+        except Exception as exc:
+            log("delivery failed (attempt %s): %s" % (type(exc).__name__, exc))
+
+        if attempt < ATTEMPTS:
+            time.sleep(delay)
+            delay *= 2
+
+    log("giving up after %s attempts" % ATTEMPTS)
+    return False
+
+
+def main():
+    if len(sys.argv) < 4:
+        log("called with %s arguments, expected at least 3" % (len(sys.argv) - 1))
+        return
+
+    alert_path, api_key, hook_url = sys.argv[1], sys.argv[2], sys.argv[3]
+
+    try:
+        with open(alert_path) as handle:
+            alert = json.load(handle)
+    except Exception as exc:
+        log("could not read alert file %s: %s" % (alert_path, exc))
+        return
+
+    try:
+        # Separators matter: the console signs the exact bytes it receives, so
+        # the body must serialise identically on both sides.
+        payload = json.dumps(alert, separators=(",", ":"))
+    except Exception as exc:
+        log("could not serialise alert: %s" % exc)
+        return
+
+    deliver(hook_url, api_key, payload)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:  # absolutely nothing escapes
+        try:
+            log("unhandled error: %s" % exc)
+        except Exception:
+            pass
+    sys.exit(0)

@@ -69,3 +69,28 @@ class WazuhConnection(Base):
     last_sync_error: Mapped[str | None] = mapped_column(Text)
 
     tenant: Mapped[Tenant] = relationship(back_populates="connection")
+
+
+class TenantSla(Base):
+    """Contractual response times, per tenant, by severity band.
+
+    The row with the highest `severity_min` not exceeding the incident's severity
+    wins. A tenant with no rows has no SLA and shows no countdown.
+    """
+
+    __tablename__ = "tenant_slas"
+    __table_args__ = (
+        CheckConstraint("severity_min between 0 and 15", name="tenant_slas_severity_check"),
+        CheckConstraint("respond_minutes > 0", name="tenant_slas_respond_check"),
+        CheckConstraint("resolve_minutes > 0", name="tenant_slas_resolve_check"),
+        CheckConstraint(
+            "resolve_minutes >= respond_minutes", name="tenant_slas_order_check"
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    severity_min: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    respond_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    resolve_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
