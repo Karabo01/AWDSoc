@@ -83,9 +83,7 @@ def update(
         snapshot["truncated"] = True
         return snapshot
 
-    snapshot["entities"] = {
-        key: values[:5] for key, values in snapshot.get("entities", {}).items()
-    }
+    snapshot["entities"] = {key: values[:5] for key, values in snapshot.get("entities", {}).items()}
     snapshot["truncated"] = True
     if _fits(snapshot):
         return snapshot

@@ -5,14 +5,20 @@ import { onSessionEnded } from "@/api/client";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
+import { AgentDetail } from "@/routes/AgentDetail";
+import { Agents } from "@/routes/Agents";
 import { AlertDetail } from "@/routes/AlertDetail";
 import { Alerts } from "@/routes/Alerts";
+import { AuditLog } from "@/routes/AuditLog";
+import { Coverage } from "@/routes/Coverage";
+import { EntityDetail } from "@/routes/EntityDetail";
+import { Entities } from "@/routes/Entities";
 import { IncidentDetail } from "@/routes/IncidentDetail";
 import { Incidents } from "@/routes/Incidents";
 import { Login } from "@/routes/Login";
 import { Overview } from "@/routes/Overview";
-import { Placeholder } from "@/routes/Placeholder";
 import { Tenants } from "@/routes/Tenants";
+import { Users } from "@/routes/Users";
 
 export function App() {
   const restore = useAuth((s) => s.restore);
@@ -39,15 +45,13 @@ export function App() {
         <Route path="/incidents/:tenant/:number" element={<IncidentDetail />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/alerts/:id" element={<AlertDetail />} />
-        <Route
-          path="/entities"
-          element={<Placeholder title="Entities" milestone="M6" />}
-        />
-        <Route path="/agents" element={<Placeholder title="Agents" milestone="M7" />} />
-        <Route
-          path="/coverage"
-          element={<Placeholder title="MITRE coverage" milestone="M7" />}
-        />
+        <Route path="/entities" element={<Entities />} />
+        {/* An entity value can contain slashes (a file path, a DOMAIN\user), so
+            the wildcard mirrors the `{value:path}` parameter on the API. */}
+        <Route path="/entities/:type/*" element={<EntityDetail />} />
+        <Route path="/agents" element={<Agents />} />
+        <Route path="/agents/:agentId" element={<AgentDetail />} />
+        <Route path="/coverage" element={<Coverage />} />
         <Route
           path="/settings/tenants"
           element={
@@ -60,7 +64,7 @@ export function App() {
           path="/settings/users"
           element={
             <RequireAuth roles={["platform_admin", "client_admin"]}>
-              <Placeholder title="Users" milestone="M8" />
+              <Users />
             </RequireAuth>
           }
         />
@@ -68,7 +72,7 @@ export function App() {
           path="/settings/audit"
           element={
             <RequireAuth roles={["platform_admin", "client_admin"]}>
-              <Placeholder title="Audit log" milestone="M8" />
+              <AuditLog />
             </RequireAuth>
           }
         />

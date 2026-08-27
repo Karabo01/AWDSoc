@@ -14,7 +14,7 @@ from sqlalchemy import Select, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app import audit
+from app import audit, events
 from app.db import get_session
 from app.deps.auth import CurrentUser, accessible_tenant_ids
 from app.deps.tenancy import TenantScope, get_tenant_scope
@@ -33,6 +33,8 @@ from app.models.incident import OPEN_STATUSES
 from app.pagination import decode_cursor, encode_cursor
 from app.schemas.alert import AlertPage, AlertSummary
 from app.schemas.incident import (
+    BulkResult,
+    BulkUpdate,
     CommentCreate,
     CommentRead,
     EntityRead,
@@ -49,14 +51,10 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 Scope = Annotated[TenantScope, Depends(get_tenant_scope)]
 
 MAX_PAGE = 200
-NOT_FOUND = HTTPException(
-    status_code=status.HTTP_404_NOT_FOUND, detail="No such incident."
-)
+NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such incident.")
 
 
-async def _scoped(
-    stmt: Select, session: AsyncSession, user: User, scope: TenantScope
-) -> Select:
+async def _scoped(stmt: Select, session: AsyncSession, user: User, scope: TenantScope) -> Select:
     stmt = scope.apply(stmt, Incident.tenant_id)
     if scope.is_fleet_view:
         allowed = await accessible_tenant_ids(session, user)
@@ -65,7 +63,7 @@ async def _scoped(
     return stmt
 
 
-def _summary(
+def summarise(
     incident: Incident, tenant: Tenant | None, assignee: User | None, now: datetime
 ) -> IncidentSummary:
     payload = IncidentSummary.model_validate(incident)
@@ -175,7 +173,7 @@ async def list_incidents(
     has_more = len(rows) > limit
     rows = rows[:limit]
     now = datetime.now(UTC)
-    items = [_summary(i, t, a, now) for i, t, a in rows]
+    items = [summarise(i, t, a, now) for i, t, a in rows]
     next_cursor = (
         encode_cursor(rows[-1][0].last_seen, rows[-1][0].id) if has_more and rows else None
     )
@@ -215,7 +213,7 @@ async def get_incident(
     incident, tenant, assignee = await _load(session, user, scope, incident_id)
     now = datetime.now(UTC)
     detail = IncidentDetail.model_validate(incident)
-    summary = _summary(incident, tenant, assignee, now)
+    summary = summarise(incident, tenant, assignee, now)
     for field in (
         "tenant_name",
         "tenant_slug",
@@ -237,9 +235,7 @@ async def update_incident(
     scope: Scope,
 ) -> IncidentDetail:
     if user.role == "client_viewer":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Read-only access."
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Read-only access.")
 
     incident, _tenant, _assignee = await _load(session, user, scope, incident_id)
     now = datetime.now(UTC)
@@ -288,6 +284,17 @@ async def update_incident(
         detail=changes,
     )
     await session.commit()
+
+    # After the commit, never before: an event announcing a change that then
+    # rolled back would put every open queue out of step with the database.
+    await events.publish(
+        tenant_id=incident.tenant_id,
+        incident_id=incident.id,
+        kind="updated",
+        number=incident.number,
+        severity=incident.severity,
+        status=incident.status,
+    )
     return await get_incident(incident_id, user, session, scope)
 
 
@@ -386,9 +393,7 @@ async def add_comment(
     scope: Scope,
 ) -> CommentRead:
     if user.role == "client_viewer":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Read-only access."
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Read-only access.")
     incident, _tenant, _assignee = await _load(session, user, scope, incident_id)
 
     visibility = payload.visibility
@@ -504,3 +509,98 @@ async def timeline(
 
     entries.sort(key=lambda e: e.at, reverse=True)
     return entries[:limit]
+
+
+@router.post("/bulk", response_model=BulkResult)
+async def bulk_update(
+    payload: BulkUpdate,
+    user: CurrentUser,
+    session: Session,
+    scope: Scope,
+) -> BulkResult:
+    """Apply one triage decision across a selection.
+
+    Every case is re-checked against the caller's tenancy individually. A list of
+    ids from the client is a request, not an authorisation: an id the token
+    cannot reach is skipped, and skipping is indistinguishable from the id not
+    existing, so this cannot be used to probe for other tenants' incidents.
+
+    The clock rules run per case through the same `sla` helpers the single-case
+    path uses, because a bulk resolve has exactly the same SLA consequences as
+    five individual ones.
+    """
+    if user.role == "client_viewer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Read-only access.")
+
+    result = BulkResult()
+    now = datetime.now(UTC)
+    assignee_id = user.id if payload.assign_to_me else payload.assignee_id
+    touches_assignee = payload.assign_to_me or "assignee_id" in payload.model_fields_set
+
+    if payload.status is None and not touches_assignee and payload.classification is None:
+        result.reason = "Nothing to change."
+        result.skipped = list(payload.incident_ids)
+        return result
+
+    published: list[tuple] = []
+
+    for incident_id in payload.incident_ids:
+        try:
+            incident, _tenant, _assignee = await _load(session, user, scope, incident_id)
+        except HTTPException:
+            result.skipped.append(incident_id)
+            continue
+
+        changes: dict = {}
+
+        if touches_assignee:
+            incident.assignee_id = assignee_id
+            changes["assignee_id"] = str(assignee_id) if assignee_id else None
+            if assignee_id and sla.mark_first_response(incident, now=now):
+                changes["first_response"] = True
+
+        if payload.classification is not None:
+            incident.classification = payload.classification
+            changes["classification"] = payload.classification
+
+        if payload.status is not None and payload.status != incident.status:
+            changes["status"] = sla.apply_status_transition(incident, payload.status, now=now)
+
+        if not changes:
+            result.skipped.append(incident_id)
+            continue
+
+        incident.updated_at = now
+        await audit.record(
+            session,
+            action="incident.bulk_updated",
+            target_type="incident",
+            target_id=incident.id,
+            tenant_id=incident.tenant_id,
+            user_id=user.id,
+            detail=changes,
+        )
+        result.updated.append(incident_id)
+        published.append(
+            (incident.tenant_id, incident.id, incident.number, incident.severity, incident.status)
+        )
+
+    # One transaction for the whole selection: a bulk resolve is one decision, and
+    # half of it landing is worse than none of it landing.
+    await session.commit()
+
+    for tenant_id, iid, number, severity, incident_status in published:
+        await events.publish(
+            tenant_id=tenant_id,
+            incident_id=iid,
+            kind="updated",
+            number=number,
+            severity=severity,
+            status=incident_status,
+        )
+
+    if result.skipped and not result.updated:
+        result.reason = "None of those cases could be changed."
+    elif result.skipped:
+        result.reason = f"{len(result.skipped)} of {len(payload.incident_ids)} were skipped."
+    return result

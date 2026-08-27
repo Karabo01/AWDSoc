@@ -22,4 +22,12 @@ def _stringify(value: Any) -> Any:
     return value
 
 
+def _stringify_scalar(value: Any) -> Any:
+    """The scalar counterpart: a bare `inet` column, as on `agents.ip`."""
+    if value is None or isinstance(value, str):
+        return value
+    return str(value)
+
+
 StrList = Annotated[list[str], BeforeValidator(_stringify)]
+NetAddr = Annotated[str, BeforeValidator(_stringify_scalar)]

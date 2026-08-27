@@ -50,9 +50,7 @@ async def ensure_partitions(session: AsyncSession, *, today: date | None = None)
     return created
 
 
-async def drop_expired_partitions(
-    session: AsyncSession, *, today: date | None = None
-) -> list[str]:
+async def drop_expired_partitions(session: AsyncSession, *, today: date | None = None) -> list[str]:
     """Drop partitions wholly older than the retention window.
 
     A partition is dropped only once its upper bound has passed the cutoff, so no

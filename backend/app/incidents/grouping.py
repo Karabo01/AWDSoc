@@ -196,9 +196,7 @@ def _attach(
     incident.updated_at = datetime.now(UTC)
 
 
-async def _create(
-    session: AsyncSession, alert: AlertFacts, policy: list[TenantSla]
-) -> Incident:
+async def _create(session: AsyncSession, alert: AlertFacts, policy: list[TenantSla]) -> Incident:
     now = datetime.now(UTC)
     number = await next_incident_number(session, alert.tenant_id)
 

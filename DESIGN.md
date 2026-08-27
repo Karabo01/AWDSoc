@@ -837,9 +837,15 @@ Each milestone ends somewhere demonstrable. Do not start the next until the curr
 
 **M6 — Entities.** Entity index, entity page, pivots against the GIN indexes. Verify query plans on a partitioned table with at least a million rows before calling it done.
 
+> **Built, not yet verified at scale.** The index work is done — `0004` adds the `last_seen` ordering index, a `pg_trgm` GIN index for the substring search, and the reverse index on `incident_entities` the entity→incidents pivot needs. The million-row `EXPLAIN` pass has **not** been run: there is no Postgres in the test suite and the deployment holds a handful of alerts. This acceptance criterion is still open.
+
 **M7 — Manager integration.** Per-tenant agent sync worker, agent pages, rule read-through, MITRE coverage, fleet overview with per-tenant health.
 
+> Agent sync is an hourly cron in the worker plus a manual staff-triggered sweep. It is scoped by `agent_group` on a shared manager, prunes only what a *successful* read could see, and leaves the previous rows in place on failure. The misgrouping check from §2 is implemented as a query over `agents ⋈ wazuh_connections` and surfaced at the top of the overview and on the agent page. Rule read-through caches an hour and degrades through a stale copy, then through what our own alerts recorded, then to the bare rule id.
+
 **M8 — Analyst polish.** SSE live updates, keyboard navigation, bulk actions, empty and error states, reduced-motion pass, mobile layout for the queue.
+
+> SSE rides Redis pub/sub and carries a nudge rather than data — the client refetches, so a dropped message costs a round trip instead of a missing row. `EventSource` cannot set headers, so `/incidents/stream` is the one route in the API that reads its credential from the query string; `tests/test_new_routes.py` asserts it stays the only one. The reduced-motion pass was already in `tokens.css` from M1.
 
 **v1.1 — Client access.** Client user provisioning, the client-facing queue, and the client view of comments. Deliberately after launch; the schema and roles already carry it.
 

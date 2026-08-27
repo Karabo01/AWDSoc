@@ -119,3 +119,19 @@ export const incidentTimeline = (id: string) =>
 
 export const incidentEntities = (id: string) =>
   api<IncidentEntity[]>(`/incidents/${id}/entities`);
+
+export interface BulkResult {
+  updated: string[];
+  /** Cases the token could not reach, or that needed no change. Kept separate so
+   *  a partial success reads as one rather than as a silent failure. */
+  skipped: string[];
+  reason: string | null;
+}
+
+export const bulkUpdate = (body: {
+  incident_ids: string[];
+  status?: string;
+  assignee_id?: string | null;
+  assign_to_me?: boolean;
+  classification?: string;
+}) => api<BulkResult>("/incidents/bulk", { method: "POST", body });

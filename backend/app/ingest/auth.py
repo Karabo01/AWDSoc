@@ -213,7 +213,7 @@ async def authenticate(
         tenant = None
         reason = Rejection.LOOKUP_UNAVAILABLE
 
-    presented = (signature_header or "")
+    presented = signature_header or ""
     if presented.startswith(SIGNATURE_PREFIX):
         presented = presented[len(SIGNATURE_PREFIX) :]
     else:

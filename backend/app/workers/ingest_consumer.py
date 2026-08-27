@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import events
 from app.config import settings
 from app.db import SessionLocal
 from app.incidents import entities as entity_store
@@ -132,28 +133,44 @@ async def write_batch(session: AsyncSession, entries: list[tuple[str, dict]]) ->
             )
         )
 
-    await _group(session, rows, inserted)
+    touched = await _group(session, rows, inserted)
 
     await session.commit()
+
+    # After the commit. An open queue told about an incident that then rolled
+    # back would refetch and find nothing, which reads as a bug to an analyst.
+    for tenant_id, incident_id, number, severity, created in touched:
+        await events.publish(
+            tenant_id=tenant_id,
+            incident_id=incident_id,
+            kind="created" if created else "alert",
+            number=number,
+            severity=severity,
+        )
+
     return len(rows)
 
 
-async def _group(
-    session: AsyncSession, rows: list[dict], inserted: dict
-) -> None:
+async def _group(session: AsyncSession, rows: list[dict], inserted: dict) -> list[tuple]:
     """Attach each newly written alert to an incident.
 
     One alert at a time, in timestamp order, so `last_seen` and the evidence
     snapshot end up reflecting the real sequence rather than batch order.
+
+    Returns what changed, for the caller to announce once the transaction has
+    committed. Nothing is published from inside here.
     """
     fresh = [r for r in rows if (r["tenant_id"], r["wazuh_id"], r["timestamp"]) in inserted]
     if not fresh:
-        return
+        return []
 
     fresh.sort(key=lambda r: r["timestamp"])
 
     windows: dict[uuid.UUID, int] = {}
     policies: dict[uuid.UUID, list] = {}
+    # Keyed by incident so a batch of forty alerts joining one case announces it
+    # once rather than forty times.
+    touched: dict[uuid.UUID, tuple] = {}
 
     for row in fresh:
         tenant_id = row["tenant_id"]
@@ -187,11 +204,21 @@ async def _group(
             primary_entity=primary_entity(row["ecs"]),
         )
 
-        incident, _created = await attach_or_create(
+        incident, created = await attach_or_create(
             session,
             alert=facts,
             grouping_window_minutes=windows[tenant_id],
             policy=policies[tenant_id],
+        )
+        # `created` wins if any alert in this batch opened the case: a new
+        # incident is the event worth surfacing.
+        was_created = created or (touched[incident.id][4] if incident.id in touched else False)
+        touched[incident.id] = (
+            tenant_id,
+            incident.id,
+            incident.number,
+            incident.severity,
+            was_created,
         )
 
         alert_id = inserted[(tenant_id, row["wazuh_id"], row["timestamp"])]
@@ -209,6 +236,8 @@ async def _group(
             seen_at=row["timestamp"],
             primary_value=facts.primary_entity,
         )
+
+    return list(touched.values())
 
 
 async def _drain_once(redis, consumer: str) -> int:

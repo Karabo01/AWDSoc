@@ -66,9 +66,7 @@ class Incident(Base):
     sla_respond_by: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sla_resolve_by: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sla_paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    sla_paused_seconds: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
+    sla_paused_seconds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     first_response_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -45,7 +45,7 @@ class TokenClaims:
     user_id: uuid.UUID
     role: str
     is_staff: bool
-    tenant_id: uuid.UUID | None      # client users only
+    tenant_id: uuid.UUID | None  # client users only
     active_tenant: uuid.UUID | None  # staff only; None means all tenants
     token_type: TokenType
     jti: str

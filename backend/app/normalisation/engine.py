@@ -64,8 +64,7 @@ def _parse(document: dict) -> Mapping:
     return Mapping(
         version=int(document["version"]),
         defaults={
-            name: _parse_field_spec(spec)
-            for name, spec in (document.get("defaults") or {}).items()
+            name: _parse_field_spec(spec) for name, spec in (document.get("defaults") or {}).items()
         },
         overrides=[
             Override(
@@ -91,9 +90,7 @@ def load_map(version: int) -> Mapping:
     with path.open(encoding="utf-8") as handle:
         mapping = _parse(yaml.safe_load(handle))
     if mapping.version != version:
-        raise ValueError(
-            f"{path.name} declares version {mapping.version}, expected {version}"
-        )
+        raise ValueError(f"{path.name} declares version {mapping.version}, expected {version}")
     return mapping
 
 

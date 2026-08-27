@@ -431,6 +431,40 @@ the address that was actually seen:
 ingest rejected: slug=... reason=disallowed_ip ip=<what we saw>
 ```
 
+## What M6-M8 added to the deployment
+
+Nothing new to configure - no new resources, no new environment variables - but
+three things behave differently after this deploy.
+
+**Two more migrations.** `0004` adds the entity indexes and `0005` the agent
+ones. `alembic upgrade head` is already the pre-deploy command, so they apply
+themselves. `0004` runs `create extension if not exists "pg_trgm"`, the same kind
+of statement `0001` already runs for `pgcrypto` and `citext`; if those worked,
+this will. `0005` creates an index on the partitioned `alerts` parent, so
+Postgres builds it on every existing partition - on a large table that deploy
+will take longer than usual and holds a lock while it runs.
+
+**The worker now calls out to client managers.** Agent sync runs hourly at 23
+minutes past, not at startup, so a deploy does not fan out to every client's
+Wazuh API at once. It needs the Manager API connection configured on the tenant
+and port 55000 reachable from this host's egress address. A client whose manager
+is unreachable records `last_sync_error` and keeps its previous agent rows -
+stale agent data beats an empty page - and shows as "manager unreachable" on the
+overview.
+
+**The queue holds an SSE connection open.** `GET /api/v1/incidents/stream` stays
+open indefinitely and sends a keepalive comment every 20 seconds. Traefik does
+not buffer responses, so this works through it as deployed. If you ever put nginx
+in front, it buffers by default and the stream will arrive all at once on
+disconnect - the route already sends `X-Accel-Buffering: no` to prevent that, but
+the header only helps if the proxy honours it. If the connection cannot be
+established the queue falls back to polling and the header shows "Reconnecting",
+so a proxy that breaks SSE degrades rather than fails.
+
+One consequence worth knowing: each open queue tab holds one connection for its
+whole life. On the 4-core box that is fine for a SOC-sized team, but it is a
+real per-tab cost rather than a free one.
+
 ## Moving to the production host later
 
 **Keep `soc.awdtech.co.za` pointed here now and take the name with you.** The

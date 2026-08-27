@@ -91,6 +91,4 @@ async def list_audit(
         read.actor_name = actor.full_name if actor else None
         items.append(read)
 
-    return AuditPage(
-        items=items, next_before_id=rows[-1][0].id if has_more and rows else None
-    )
+    return AuditPage(items=items, next_before_id=rows[-1][0].id if has_more and rows else None)

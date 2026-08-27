@@ -28,6 +28,7 @@ HASH_LENGTHS = {32, 40, 64, 128}  # md5, sha1, sha256, sha512
 # Wazuh decoders use several spellings of "this field was empty".
 _PLACEHOLDERS = {"", "-", "--", "n/a", "na", "null", "(null)", "none", "nil", "unknown"}
 
+
 # An entity page for a loopback address is noise in every tenant. Private ranges
 # are kept: 10.x is exactly what an analyst pivots on during lateral movement.
 def _is_useful_ip(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:

@@ -22,6 +22,12 @@ log = logging.getLogger(__name__)
 # cached and every consumer tolerates staleness, so failing fast is correct.
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
+# The manager's own default page size is 500. A ceiling on the total keeps one
+# misconfigured tenant - a group holding the whole fleet - from turning a sync
+# into an unbounded read.
+AGENT_PAGE = 500
+MAX_AGENTS = 10_000
+
 
 class ManagerError(Exception):
     """Any failure reaching or authenticating to a tenant's manager."""
@@ -147,6 +153,39 @@ class WazuhManagerClient:
                 return False
             raise
         return int(payload.get("data", {}).get("total_affected_items", 0)) > 0
+
+    async def agents(self, group: str | None = None) -> list[dict]:
+        """Every agent visible to this tenant, paged out of the manager.
+
+        On a shared manager `group` is the tenant's boundary and must be applied
+        here - without it one client's sync would cache another client's fleet.
+        The caller passes `self.agent_group`; it is a parameter rather than an
+        implicit read so a deliberate whole-manager sync stays possible.
+        """
+        collected: list[dict] = []
+        offset = 0
+        while True:
+            params: dict[str, Any] = {"limit": AGENT_PAGE, "offset": offset}
+            if group:
+                params["group"] = group
+            payload = await self._get("/agents", **params)
+            data = payload.get("data", {})
+            items = data.get("affected_items") or []
+            collected.extend(items)
+
+            total = int(data.get("total_affected_items", len(collected)))
+            offset += len(items)
+            # `not items` guards a manager that reports a total it will not serve;
+            # without it a bad total spins this loop forever.
+            if not items or offset >= total or len(collected) >= MAX_AGENTS:
+                break
+        return collected[:MAX_AGENTS]
+
+    async def rule(self, rule_id: int) -> dict | None:
+        """One rule definition. None means the manager does not know it."""
+        payload = await self._get("/rules", rule_ids=str(rule_id))
+        items = payload.get("data", {}).get("affected_items") or []
+        return items[0] if items else None
 
 
 async def check_connection(

@@ -68,9 +68,7 @@ async def reprocess_alerts(
 
     while True:
         async with SessionLocal() as session:
-            stmt = select(Alert).where(
-                Alert.timestamp >= start_at, Alert.timestamp <= end_at
-            )
+            stmt = select(Alert).where(Alert.timestamp >= start_at, Alert.timestamp <= end_at)
             if tenant is not None:
                 stmt = stmt.where(Alert.tenant_id == tenant)
             if cursor is not None:

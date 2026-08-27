@@ -37,9 +37,7 @@ class Alert(Base):
     rule_id: Mapped[int] = mapped_column(Integer, nullable=False)
     rule_level: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     rule_desc: Mapped[str] = mapped_column(Text, nullable=False)
-    rule_groups: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), nullable=False, server_default="{}"
-    )
+    rule_groups: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default="{}")
     mitre_ids: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default="{}")
     mitre_tactics: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, server_default="{}"

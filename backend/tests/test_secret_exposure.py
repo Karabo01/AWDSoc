@@ -11,6 +11,12 @@ from app.main import app
 # reviewer seeing it in a diff looks twice.
 SECRET_BEARING_MODELS = {"TenantSecretRevealed"}
 
+# The one response model allowed to carry a password, for the same write-once
+# reason: a generated credential has to be shown once or it is unusable, and the
+# console has no mail path to send it down instead. Both user creation and
+# password reset return this single shape so there is exactly one to watch.
+PASSWORD_BEARING_MODELS = {"UserCreated"}
+
 FORBIDDEN_SUBSTRINGS = ("password", "secret", "ingest_secret")
 
 
@@ -27,8 +33,25 @@ def test_password_never_appears_in_any_response_model():
     # Request models legitimately accept a password; response models must not
     # return one. Anything named *In/*Update/*Create is inbound.
     inbound = tuple(("In", "Update", "Create", "Request"))
-    leaks = [o for o in offenders if not o.split(".")[0].endswith(inbound)]
+    leaks = [
+        o
+        for o in offenders
+        if not o.split(".")[0].endswith(inbound)
+        and o.split(".")[0] not in PASSWORD_BEARING_MODELS
+    ]
     assert leaks == [], f"password fields on response models: {leaks}"
+
+
+def test_the_write_once_password_model_is_the_only_exception():
+    """Guards the allowlist above.
+
+    Adding a name to `PASSWORD_BEARING_MODELS` silences the test for that model,
+    so the allowlist itself is asserted: it must stay at exactly one entry, and
+    that entry must still exist in the schema. Growing it is then a deliberate
+    edit to this assertion rather than a quiet addition to a set.
+    """
+    assert PASSWORD_BEARING_MODELS == {"UserCreated"}
+    assert "password" in _schemas()["UserCreated"].get("properties", {})
 
 
 def test_password_enc_is_not_in_the_schema_at_all():

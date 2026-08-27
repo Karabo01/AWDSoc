@@ -84,9 +84,7 @@ class TenantSla(Base):
         CheckConstraint("severity_min between 0 and 15", name="tenant_slas_severity_check"),
         CheckConstraint("respond_minutes > 0", name="tenant_slas_respond_check"),
         CheckConstraint("resolve_minutes > 0", name="tenant_slas_resolve_check"),
-        CheckConstraint(
-            "resolve_minutes >= respond_minutes", name="tenant_slas_order_check"
-        ),
+        CheckConstraint("resolve_minutes >= respond_minutes", name="tenant_slas_order_check"),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(

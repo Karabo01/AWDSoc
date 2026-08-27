@@ -67,6 +67,35 @@ class IncidentUpdate(BaseModel):
     classification: str | None = Field(default=None, max_length=200)
 
 
+class BulkUpdate(BaseModel):
+    """Triage several cases at once.
+
+    Deliberately narrower than `IncidentUpdate`: status, assignee and
+    classification are the three an analyst applies to a selection. Title and
+    severity are per-case judgements and setting either across a selection is
+    almost always a mistake.
+    """
+
+    incident_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+    status: Status | None = None
+    assignee_id: uuid.UUID | None = None
+    assign_to_me: bool = False
+    classification: str | None = Field(default=None, max_length=200)
+
+
+class BulkResult(BaseModel):
+    """Per-case outcomes, not a single verdict.
+
+    A selection can span tenants and an analyst may lack rights to part of it.
+    Reporting `updated` and `skipped` separately means a partial success reads as
+    a partial success rather than as a silent one.
+    """
+
+    updated: list[uuid.UUID] = Field(default_factory=list)
+    skipped: list[uuid.UUID] = Field(default_factory=list)
+    reason: str | None = None
+
+
 class CommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=10_000)
     visibility: Visibility = "internal"

@@ -61,9 +61,7 @@ async def _load(session: AsyncSession, tenant_id: uuid.UUID) -> Tenant:
 
 async def _sla_policy(session: AsyncSession, tenant_id: uuid.UUID) -> SlaPolicy:
     rows = await session.scalars(
-        select(TenantSla)
-        .where(TenantSla.tenant_id == tenant_id)
-        .order_by(TenantSla.severity_min)
+        select(TenantSla).where(TenantSla.tenant_id == tenant_id).order_by(TenantSla.severity_min)
     )
     return SlaPolicy(
         bands=[
@@ -83,9 +81,7 @@ async def _read(session: AsyncSession, tenant: Tenant) -> TenantRead:
     return payload
 
 
-async def _replace_sla(
-    session: AsyncSession, tenant_id: uuid.UUID, policy: SlaPolicy
-) -> None:
+async def _replace_sla(session: AsyncSession, tenant_id: uuid.UUID, policy: SlaPolicy) -> None:
     await session.execute(delete(TenantSla).where(TenantSla.tenant_id == tenant_id))
     for band in policy.bands:
         session.add(
@@ -221,9 +217,7 @@ async def update_tenant(
                 password_enc=password_enc,
                 key_version=key_version,
                 verify_ssl=(
-                    True
-                    if payload.connection.verify_ssl is None
-                    else payload.connection.verify_ssl
+                    True if payload.connection.verify_ssl is None else payload.connection.verify_ssl
                 ),
                 agent_group=payload.connection.agent_group,
             )

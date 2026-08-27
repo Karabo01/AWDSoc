@@ -74,14 +74,14 @@ async def reprocess(
     horizon = datetime.now(UTC) - timedelta(days=settings.alert_retention_days)
     start = max(payload.from_, horizon)
 
-    count_stmt = select(func.count()).select_from(Alert).where(
-        Alert.timestamp >= start, Alert.timestamp <= payload.to
+    count_stmt = (
+        select(func.count())
+        .select_from(Alert)
+        .where(Alert.timestamp >= start, Alert.timestamp <= payload.to)
     )
     if payload.tenant_id is not None:
         if await session.get(Tenant, payload.tenant_id) is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="No such client."
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such client.")
         count_stmt = count_stmt.where(Alert.tenant_id == payload.tenant_id)
     estimated = int(await session.scalar(count_stmt) or 0)
 

@@ -109,9 +109,7 @@ async def list_alerts(
     if cursor:
         last_timestamp, last_id = decode_cursor(cursor)
         # Keyset, not offset: a page boundary stays correct while rows arrive.
-        stmt = stmt.where(
-            (Alert.timestamp, Alert.id) < (last_timestamp, last_id)
-        )
+        stmt = stmt.where((Alert.timestamp, Alert.id) < (last_timestamp, last_id))
 
     stmt = stmt.order_by(Alert.timestamp.desc(), Alert.id.desc()).limit(limit + 1)
     rows = (await session.execute(stmt)).all()
@@ -132,18 +130,14 @@ async def get_alert(
     """`id` is the leading column of the primary key, so this is an index lookup
     even though the table is partitioned by timestamp."""
     stmt = (
-        select(Alert, Tenant)
-        .join(Tenant, Tenant.id == Alert.tenant_id)
-        .where(Alert.id == alert_id)
+        select(Alert, Tenant).join(Tenant, Tenant.id == Alert.tenant_id).where(Alert.id == alert_id)
     )
     stmt = await scoped(stmt, session, user, scope)
     row = (await session.execute(stmt)).first()
     if row is None:
         # Deliberately identical whether the alert does not exist or belongs to
         # another tenant. A 403 here would confirm the id.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No such alert."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such alert.")
 
     alert, tenant = row
     detail = AlertDetail.model_validate(alert)

@@ -12,6 +12,12 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
+/** For `EventSource`, which cannot send an Authorization header and so needs the
+ *  token in the URL. Nothing else should read this. */
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
 export function getRefreshToken(): string | null {
   return localStorage.getItem(REFRESH_KEY);
 }

@@ -62,9 +62,7 @@ async def ingest_status(user: CurrentUser, session: Session) -> IngestStatus:
     today = datetime.now(UTC).date()
     stats = {
         row.tenant_id: row
-        for row in await session.scalars(
-            select(IngestStat).where(IngestStat.day == today)
-        )
+        for row in await session.scalars(select(IngestStat).where(IngestStat.day == today))
     }
 
     # Bounded to the last 48h so this rides the (tenant_id, timestamp desc)

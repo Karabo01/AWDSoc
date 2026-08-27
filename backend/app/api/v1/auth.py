@@ -81,9 +81,7 @@ async def refresh(payload: RefreshRequest, session: Session) -> TokenPair:
     try:
         claims = decode_token(payload.refresh_token, "refresh")
     except TokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     if await is_revoked(claims.jti):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="This session has been signed out."
@@ -159,7 +157,5 @@ async def switch_tenant(
     if payload.tenant_id is not None:
         tenant = await session.get(Tenant, payload.tenant_id)
         if tenant is None or not await _may_access(session, user, payload.tenant_id):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="No such client."
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such client.")
     return _issue_pair(user, active_tenant=payload.tenant_id)

@@ -51,8 +51,7 @@ async def ensure_bootstrap_admin(session: AsyncSession) -> str | None:
     if len(password) < MIN_PASSWORD:
         if password:
             log.warning(
-                "BOOTSTRAP_ADMIN_PASSWORD is shorter than %s characters; "
-                "generating one instead",
+                "BOOTSTRAP_ADMIN_PASSWORD is shorter than %s characters; generating one instead",
                 MIN_PASSWORD,
             )
         password = secrets.token_urlsafe(18)

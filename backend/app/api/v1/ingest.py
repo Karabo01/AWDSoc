@@ -95,9 +95,7 @@ async def ingest_wazuh(
         return {"detail": "Each alert must be a JSON object."}
 
     signature = (x_awd_signature or "").removeprefix(SIGNATURE_PREFIX)
-    queued = await stream.publish(
-        tenant_id=str(tenant.id), signature=signature, alerts=alerts
-    )
+    queued = await stream.publish(tenant_id=str(tenant.id), signature=signature, alerts=alerts)
 
     if queued == stream.Accepted.REPLAY:
         log.warning("ingest replay rejected: slug=%s ip=%s", tenant_slug, source_ip)

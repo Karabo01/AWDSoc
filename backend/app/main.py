@@ -11,9 +11,7 @@ from app.config import settings
 from app.queue import close_arq_pool
 from app.redis_client import close_redis
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(settings.app_name)
 
 

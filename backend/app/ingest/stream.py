@@ -74,9 +74,7 @@ def rate_key(tenant_id: str) -> str:
     return f"{settings.app_name}:rate:{tenant_id}"
 
 
-async def publish(
-    *, tenant_id: str, signature: str, alerts: list[dict]
-) -> int:
+async def publish(*, tenant_id: str, signature: str, alerts: list[dict]) -> int:
     """Returns the number of alerts queued, or a negative `Accepted` code."""
     limit, window = settings.rate_limit
     # A replay can only land within twice the skew window of the original.
