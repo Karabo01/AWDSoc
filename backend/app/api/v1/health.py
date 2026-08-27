@@ -1,8 +1,10 @@
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Response, status
 from redis.exceptions import RedisError
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
@@ -12,6 +14,29 @@ from app.redis_client import get_redis
 router = APIRouter(tags=["health"])
 
 WORKER_HEARTBEAT_KEY = f"{settings.app_name}:worker:heartbeat"
+
+
+def _postgres_target() -> str:
+    """host:port/database, never the password.
+
+    Reported on failure because the most common cause of `gaierror` here is a
+    DATABASE_URL whose host was mangled - a password containing `/` or `@` that
+    was not percent-encoded parses into the wrong host, and the error alone
+    looks identical to a container that is simply down.
+    """
+    try:
+        url = make_url(settings.database_url)
+        return f"{url.host}:{url.port or 5432}/{url.database}"
+    except Exception:  # noqa: BLE001 - diagnostics must never raise
+        return "unparseable DATABASE_URL"
+
+
+def _redis_target() -> str:
+    try:
+        parts = urlsplit(settings.redis_url)
+        return f"{parts.hostname}:{parts.port or 6379}"
+    except Exception:  # noqa: BLE001
+        return "unparseable REDIS_URL"
 
 
 async def _check_postgres() -> tuple[bool, str | None]:
@@ -53,8 +78,8 @@ async def healthz(response: Response) -> dict[str, Any]:
 
     return {
         "status": "ok" if healthy else "degraded",
-        "postgres": {"ok": pg_ok, "error": pg_err},
-        "redis": {"ok": redis_ok, "error": redis_err},
+        "postgres": {"ok": pg_ok, "error": pg_err, "target": _postgres_target()},
+        "redis": {"ok": redis_ok, "error": redis_err, "target": _redis_target()},
         "worker": {"alive": await _worker_alive()},
         # A growing depth with a live worker means the writer is behind; a
         # growing depth with no worker means alerts are buffering, not lost.

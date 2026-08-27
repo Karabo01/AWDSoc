@@ -87,3 +87,19 @@ def test_health_is_reachable_through_the_api_path_prefix():
 def test_the_root_health_path_survives_for_the_container_probe():
     """Coolify probes the container directly, never through Traefik."""
     assert "status" in client.get("/healthz").json()
+
+
+def test_health_reports_which_host_it_dialled():
+    """`gaierror` alone cannot distinguish a stopped container from a mangled
+    DATABASE_URL. Reporting the parsed host makes the difference obvious."""
+    body = client.get("/api/healthz").json()
+    assert "target" in body["postgres"]
+    assert "target" in body["redis"]
+
+
+def test_the_health_target_never_carries_the_password():
+    from app.api.v1.health import _postgres_target, _redis_target
+
+    for target in (_postgres_target(), _redis_target()):
+        assert "://" not in target
+        assert "@" not in target or "unparseable" in target
