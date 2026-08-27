@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.types import StrList
+
 EntityType = Literal["ip", "user", "host", "hash"]
 
 
@@ -37,10 +39,11 @@ class AlertDetail(AlertSummary):
     # The inspector shows these side by side. `raw` is never mutated.
     ecs: dict
     raw: dict
-    related_ip: list[str] = Field(default_factory=list)
-    related_user: list[str] = Field(default_factory=list)
-    related_host: list[str] = Field(default_factory=list)
-    related_hash: list[str] = Field(default_factory=list)
+    # inet[] arrives from asyncpg as IPv4Address objects, not strings.
+    related_ip: StrList = Field(default_factory=list)
+    related_user: StrList = Field(default_factory=list)
+    related_host: StrList = Field(default_factory=list)
+    related_hash: StrList = Field(default_factory=list)
 
 
 class AlertPage(BaseModel):

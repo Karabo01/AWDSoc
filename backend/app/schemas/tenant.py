@@ -13,6 +13,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.types import StrList
+
 # The slug lands in a public ingest URL, so it is URL-safe by construction rather
 # than by escaping at the point of use.
 SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$")
@@ -172,7 +174,8 @@ class TenantRead(BaseModel):
     status: str
     alert_floor: int
     grouping_window_minutes: int
-    ingest_cidrs: list[str] = Field(default_factory=list)
+    # cidr[] arrives from asyncpg as IPv4Network objects, not strings.
+    ingest_cidrs: StrList = Field(default_factory=list)
     colour: str | None
     created_at: datetime
     connection: WazuhConnectionRead | None = None
