@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # Partitions are created this many months ahead by the maintenance task.
     partition_premake_months: int = 3
 
+    # Each Postgres connection costs the server several MB, so on a small host
+    # the pool is a real memory decision: api and worker each hold their own.
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+
     sql_echo: bool = Field(default=False)
 
     @property

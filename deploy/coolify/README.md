@@ -227,3 +227,118 @@ countdown — a tenant with no bands has no SLA by design.
 Watch `failed to normalise` on the overview. A decoder the map does not cover
 lands with `map_version = -1`; fix `app/normalisation/maps/v1.yaml`, redeploy,
 then `POST /api/v1/admin/reprocess` over the affected range to backfill.
+
+---
+
+# Deploying on the dev host (4 cores / 8 GB / 100 GB)
+
+The console runs on its own VPS; Wazuh and the RMM stay on theirs. This is the
+topology the trust boundary in DESIGN.md §3 assumes — alerts arrive over the
+public internet, and the Manager API is reached outbound over it — so nothing
+here is a workaround.
+
+## Sizing
+
+| Resource | RAM |
+|---|---|
+| `postgres` | 1–2 GB |
+| `redis` | see the cap below |
+| `api` | 300–400 MB |
+| `worker` | 300–400 MB |
+| `web` | ~20 MB |
+
+Roughly 2–3 GB steady state. On 8 GB that leaves room, but two defaults are
+sized for a production cohort and must come down, and one build-time risk needs
+handling.
+
+### Lower the Redis stream cap
+
+`INGEST_STREAM_MAXLEN` defaults to 1,000,000 entries — at ~3 KB an alert that is
+~3 GB of Redis if the worker ever stops, which on an 8 GB host is fatal rather
+than merely slow.
+
+```
+INGEST_STREAM_MAXLEN=50000
+```
+
+~150 MB worst case, still hours of buffer at six agents.
+
+### Lower the connection pools
+
+`api` and `worker` each hold their own pool, and every Postgres connection costs
+the server several MB. The defaults give 60 potential connections.
+
+```
+DB_POOL_SIZE=5
+DB_MAX_OVERFLOW=5
+```
+
+### Add swap before the first deploy
+
+Coolify builds images on the host. The frontend build (`tsc` plus Vite) wants
+1–2 GB on its own, and it runs while Postgres, Redis, `api` and `worker` are
+already resident. On 8 GB that is the most likely OOM in the whole deployment,
+and it kills a running service rather than failing the build.
+
+```bash
+fallocate -l 4G /swapfile && chmod 600 /swapfile
+mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+```
+
+Disk is not a concern: 90 days of alerts with `raw` and every index is
+single-digit GB at this volume, against 100 GB.
+
+## Outbound: reaching the Wazuh Manager API
+
+On the Wazuh host, create a **dedicated read-only API user** — `agent:read`,
+`rules:read`, `manager:read`. Never reuse `wazuh-wui`.
+
+Restrict port 55000 to the console's egress address. Find it from inside the
+`api` container, not from your laptop:
+
+```bash
+curl -s https://ifconfig.me
+```
+
+Then set the tenant's connection to `https://<wazuh-host>:55000`, with
+`verify_ssl: false` while the API still has its self-signed certificate. Use
+**Test connection** before onboarding — it also confirms the agent group exists,
+which is the check that matters on a shared manager.
+
+## Inbound: set the CIDR allowlist properly
+
+With the two hosts separated, the address the console observes is the Wazuh
+host's real egress address, so the allowlist works as designed from day one. Get
+it from the manager itself:
+
+```bash
+curl -s https://ifconfig.me
+```
+
+Set `ingest_cidrs` to that `/32`. If alerts stop arriving, the `api` logs name
+the address that was actually seen:
+
+```
+ingest rejected: slug=... reason=disallowed_ip ip=<what we saw>
+```
+
+## Moving to the production host later
+
+**Keep `soc.awdtech.co.za` pointed here now and take the name with you.** The
+hostname is baked into every client's `hook_url`, so if it does not change, the
+move is a DNS record and nothing on any manager needs touching.
+
+The move is then:
+
+1. Deploy the same five resources on the new host, **with the same
+   `ENCRYPTION_KEY` and `JWT_SECRET`**.
+2. `pg_dump` the console database and restore it there.
+3. Repoint DNS. Re-issue TLS.
+4. Update each tenant's `ingest_cidrs` only if the *Wazuh* host moved too.
+
+**`ENCRYPTION_KEY` is the one that bites.** It decrypts every stored Wazuh
+password. Generate a fresh one on the new host and every credential in the
+restored database becomes unrecoverable ciphertext — the API will refuse to
+decrypt them rather than fail silently, but the only fix is re-entering them by
+hand. Carry the key across with the data.
