@@ -43,7 +43,13 @@ app = FastAPI(
 # routes /healthz to the web container and returns the SPA instead of JSON.
 app.include_router(health_routes.router)
 app.include_router(health_routes.router, prefix="/api", include_in_schema=False)
-app.include_router(api_router)
+# Mounted twice for the same reason health is. Traefik path routing may or may
+# not strip the matched /api prefix depending on how the platform configures it,
+# and a stripped prefix turns every route into a 404 that looks like a bug in the
+# app. Serving both spellings costs nothing and removes the dependency on a
+# proxy setting we do not control.
+app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router, prefix="/v1", include_in_schema=False)
 
 
 @app.exception_handler(Exception)

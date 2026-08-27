@@ -94,5 +94,13 @@ async def run_bootstrap() -> None:
     try:
         async with SessionLocal() as session:
             await ensure_bootstrap_admin(session)
-    except Exception:  # noqa: BLE001 - boot must survive any database problem
-        log.exception("bootstrap administrator could not be created")
+    except Exception as exc:  # noqa: BLE001 - boot must survive any database problem
+        if "does not exist" in str(exc):
+            # Overwhelmingly the cause: the pre-deploy migration never ran.
+            log.error(
+                "bootstrap administrator skipped: the schema is missing. "
+                "Run `alembic upgrade head`, and set it as the pre-deploy "
+                "command on the api resource so it applies on every deploy."
+            )
+        else:
+            log.exception("bootstrap administrator could not be created")

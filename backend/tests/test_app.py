@@ -166,3 +166,38 @@ def test_health_exposes_no_credentials_anywhere_in_its_body():
     body = json.dumps(client.get("/api/healthz").json()).lower()
     for forbidden in ("password", "secret", "://"):
         assert forbidden not in body
+
+
+def test_health_reports_whether_migrations_have_run():
+    """`select 1` passes against an empty database, so a healthy API sitting on
+    no schema looked identical to a working one."""
+    body = client.get("/api/healthz").json()
+    assert "schema" in body
+    assert isinstance(body["schema"]["ready"], bool)
+
+
+def test_a_missing_schema_does_not_make_the_endpoint_unreachable():
+    """Reported, not failed. A deploy you cannot reach is harder to repair than
+    one that tells you what is wrong."""
+    assert client.get("/api/healthz").status_code in (200, 503)
+
+
+def test_the_api_answers_with_and_without_the_api_prefix():
+    """Traefik path routing may strip the matched /api prefix depending on how
+    the platform configures it. A stripped prefix turns every route into a 404
+    that looks like a bug in the app, so both spellings are served."""
+    for path in ("/api/v1/auth/switch-tenant", "/v1/auth/switch-tenant"):
+        # 401 (route exists, no token) rather than 404 (route missing).
+        assert client.post(path, json={"tenant_id": None}).status_code == 401
+
+
+def test_only_the_canonical_prefix_is_documented():
+    """The alias is a deployment accommodation, not a second public API."""
+    paths = app.openapi()["paths"]
+    assert "/api/v1/auth/login" in paths
+    assert "/v1/auth/login" not in paths
+
+
+def test_health_answers_at_both_prefixes_too():
+    for path in ("/healthz", "/api/healthz"):
+        assert client.get(path).status_code in (200, 503)

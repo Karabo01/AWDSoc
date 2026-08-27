@@ -88,6 +88,31 @@ async def _check_postgres() -> tuple[bool, str | None]:
         return False, type(exc).__name__
 
 
+async def _schema_state() -> dict:
+    """Has `alembic upgrade head` actually run?
+
+    `select 1` succeeds against a completely empty database, so the old check
+    reported a healthy API sitting on no schema at all. Reported rather than
+    failed: a deploy that cannot be reached is harder to repair than one that
+    tells you what is wrong.
+    """
+    try:
+        async with SessionLocal() as session:
+            row = (
+                await session.execute(
+                    text(
+                        "select to_regclass('public.users') is not null as ready, "
+                        "case when to_regclass('public.alembic_version') is not null "
+                        "then (select version_num from alembic_version limit 1) end "
+                        "as revision"
+                    )
+                )
+            ).first()
+        return {"ready": bool(row.ready), "revision": row.revision}
+    except (SQLAlchemyError, OSError):
+        return {"ready": False, "revision": None}
+
+
 async def _check_redis() -> tuple[bool, str | None]:
     try:
         await get_redis().ping()
@@ -132,6 +157,7 @@ async def healthz(response: Response) -> dict[str, Any]:
             "auth": _has_password(settings.redis_url, is_postgres=False),
             "resolves": await _resolves(_host_of(settings.redis_url, is_postgres=False)),
         },
+        "schema": await _schema_state() if pg_ok else {"ready": False, "revision": None},
         "worker": {"alive": await _worker_alive()},
         # A growing depth with a live worker means the writer is behind; a
         # growing depth with no worker means alerts are buffering, not lost.

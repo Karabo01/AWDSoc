@@ -247,12 +247,45 @@ curl https://soc.awdtech.co.za/api/healthz
 **`/api/healthz`, not `/healthz`.** Traefik routes `/api` to the API and
 everything else to the web container, so the bare path returns the SPA. The root
 `/healthz` still exists for Coolify's container probe, which never goes through
-Traefik — that is what the health check field on the `api` resource should use.
+Traefik - that is what the health check field on the `api` resource should use.
 
-`postgres.ok`, `redis.ok` and `worker.alive` must all be true. Sign in at
-`https://soc.awdtech.co.za`.
+Four things must be true:
 
----
+| Field | Meaning if wrong |
+|---|---|
+| `postgres.ok` | see `target`, `auth`, `resolves` below |
+| `redis.ok` | same three fields |
+| `schema.ready` | migrations never ran - the pre-deploy command is missing |
+| `worker.alive` | `APP_ROLE=worker` did not reach the worker container |
+
+`schema.revision` should show the latest migration. If `schema.ready` is false,
+the API is running against an empty database: `select 1` succeeds, so nothing
+else reveals it until the first query fails.
+
+```bash
+docker exec <api-container> alembic upgrade head
+docker exec <api-container> alembic current
+```
+
+Then set **Pre-deploy command** on the `api` resource to `alembic upgrade head`
+so it applies on every deploy. Never on the worker.
+
+### Reading the connection diagnostics
+
+`postgres` and `redis` each report `target`, `auth` and `resolves`, which
+between them name the fault without needing a shell:
+
+| `resolves` | `auth` | error | cause |
+|---|---|---|---|
+| `false` | - | any | wrong hostname, or the container is not running |
+| `true` | `false` | `AuthenticationError` | no password in the URL |
+| `true` | `true` | `AuthenticationError` | wrong password |
+| `true` | `true` | `ConnectionError` | name resolves but nothing is listening |
+
+Coolify names database containers by UUID, so a recreated resource gets a **new
+hostname and a new password**. Both must be copied into `api` and `worker`.
+
+Sign in at `https://soc.awdtech.co.za`.
 
 # Ingest
 

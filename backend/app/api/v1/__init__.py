@@ -11,7 +11,9 @@ from app.api.v1 import (
     tenants,
 )
 
-api_router = APIRouter(prefix="/api/v1")
+# Carries no prefix of its own: main.py mounts it at both /api/v1 and /v1
+# so the app works whether or not the proxy strips the /api prefix.
+api_router = APIRouter()
 # Ingest is HMAC-authenticated, not JWT: it is included first and
 # deliberately carries no bearer dependency.
 api_router.include_router(ingest.router)
