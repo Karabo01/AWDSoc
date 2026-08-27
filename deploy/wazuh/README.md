@@ -15,7 +15,7 @@ panel hands you the exact command, filled in. It looks like this:
 
 ```bash
 sudo ./install.sh --slug acme-corp --secret <secret> \
-  --url https://console.awdtech.co.za --level 7 --group acme-corp
+  --url https://soc.awdtech.co.za --level 7 --group acme-corp
 ```
 
 `--group` is **required on a shared manager**, which is the default topology. It

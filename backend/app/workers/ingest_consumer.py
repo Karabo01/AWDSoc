@@ -16,16 +16,24 @@ import uuid
 from datetime import UTC, datetime
 
 from redis.exceptions import RedisError
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import SessionLocal
-from app.incidents.grouping import fingerprint, primary_entity
+from app.incidents import entities as entity_store
+from app.incidents.grouping import (
+    AlertFacts,
+    attach_or_create,
+    fingerprint,
+    primary_entity,
+)
+from app.incidents.sla import policy_for
 from app.ingest.parser import parse
 from app.ingest.stream import ensure_consumer_group
-from app.models import Alert, IngestStat
+from app.models import Alert, IngestStat, Tenant
 from app.normalisation.pipeline import normalise_alert
 from app.redis_client import get_redis
 
@@ -100,8 +108,14 @@ async def write_batch(session: AsyncSession, entries: list[tuple[str, dict]]) ->
     statement = insert(Alert).values(rows)
     statement = statement.on_conflict_do_nothing(
         index_elements=["tenant_id", "wazuh_id", "timestamp"]
-    )
-    await session.execute(statement)
+    ).returning(Alert.id, Alert.tenant_id, Alert.wazuh_id, Alert.timestamp)
+    # Only rows that actually landed get grouped. A redelivered alert is a
+    # no-op here, which is what keeps at-least-once delivery from inflating
+    # alert_count on an incident.
+    inserted = {
+        (row.tenant_id, row.wazuh_id, row.timestamp): row.id
+        for row in await session.execute(statement)
+    }
 
     today = datetime.now(UTC).date()
     for tenant_id, (count, size) in sizes.items():
@@ -118,8 +132,83 @@ async def write_batch(session: AsyncSession, entries: list[tuple[str, dict]]) ->
             )
         )
 
+    await _group(session, rows, inserted)
+
     await session.commit()
     return len(rows)
+
+
+async def _group(
+    session: AsyncSession, rows: list[dict], inserted: dict
+) -> None:
+    """Attach each newly written alert to an incident.
+
+    One alert at a time, in timestamp order, so `last_seen` and the evidence
+    snapshot end up reflecting the real sequence rather than batch order.
+    """
+    fresh = [r for r in rows if (r["tenant_id"], r["wazuh_id"], r["timestamp"]) in inserted]
+    if not fresh:
+        return
+
+    fresh.sort(key=lambda r: r["timestamp"])
+
+    windows: dict[uuid.UUID, int] = {}
+    policies: dict[uuid.UUID, list] = {}
+
+    for row in fresh:
+        tenant_id = row["tenant_id"]
+        if tenant_id not in windows:
+            tenant = await session.scalar(select(Tenant).where(Tenant.id == tenant_id))
+            if tenant is None:
+                log.warning("alert for unknown tenant %s; not grouping", tenant_id)
+                windows[tenant_id] = -1
+                policies[tenant_id] = []
+                continue
+            windows[tenant_id] = tenant.grouping_window_minutes
+            policies[tenant_id] = await policy_for(session, tenant_id)
+        if windows[tenant_id] < 0:
+            continue
+
+        related = {
+            "related_ip": row["related_ip"],
+            "related_user": row["related_user"],
+            "related_host": row["related_host"],
+            "related_hash": row["related_hash"],
+        }
+        facts = AlertFacts(
+            tenant_id=tenant_id,
+            timestamp=row["timestamp"],
+            rule_id=row["rule_id"],
+            rule_level=row["rule_level"],
+            rule_desc=row["rule_desc"],
+            fingerprint=row["fingerprint"],
+            ecs=row["ecs"],
+            related=related,
+            primary_entity=primary_entity(row["ecs"]),
+        )
+
+        incident, _created = await attach_or_create(
+            session,
+            alert=facts,
+            grouping_window_minutes=windows[tenant_id],
+            policy=policies[tenant_id],
+        )
+
+        alert_id = inserted[(tenant_id, row["wazuh_id"], row["timestamp"])]
+        await session.execute(
+            update(Alert)
+            .where(Alert.id == alert_id, Alert.timestamp == row["timestamp"])
+            .values(incident_id=incident.id)
+        )
+
+        await entity_store.upsert_and_link(
+            session,
+            tenant_id=tenant_id,
+            incident_id=incident.id,
+            related=related,
+            seen_at=row["timestamp"],
+            primary_value=facts.primary_entity,
+        )
 
 
 async def _drain_once(redis, consumer: str) -> int:

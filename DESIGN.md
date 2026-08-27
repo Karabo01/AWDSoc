@@ -738,7 +738,7 @@ Per tenant. Nothing here changes detection behaviour; it only adds an outbound p
 ```xml
 <integration>
   <name>custom-awd-console</name>
-  <hook_url>https://console.awdtech.co.za/api/v1/ingest/wazuh/acme-corp</hook_url>
+  <hook_url>https://soc.awdtech.co.za/api/v1/ingest/wazuh/acme-corp</hook_url>
   <api_key>THE_TENANT_INGEST_SECRET</api_key>
   <level>7</level>
   <alert_format>json</alert_format>
@@ -750,7 +750,7 @@ On a **shared** manager, add one block per tenant, each with a `<group>` filter 
 ```xml
 <integration>
   <name>custom-awd-console</name>
-  <hook_url>https://console.awdtech.co.za/api/v1/ingest/wazuh/beta-ltd</hook_url>
+  <hook_url>https://soc.awdtech.co.za/api/v1/ingest/wazuh/beta-ltd</hook_url>
   <api_key>BETA_TENANT_SECRET</api_key>
   <group>beta-ltd</group>
   <level>7</level>

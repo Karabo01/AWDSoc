@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -94,3 +95,20 @@ class TenantSla(Base):
     severity_min: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     respond_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     resolve_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class TenantCounter(Base):
+    """Atomic per-tenant incident numbering.
+
+    `max(number) + 1` races under concurrent arrival. This row lock serialises
+    only the writers for one tenant.
+    """
+
+    __tablename__ = "tenant_counters"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    next_incident_number: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="1"
+    )

@@ -3,7 +3,7 @@ from app.models.alert import Alert
 from app.models.audit import AuditLog, IngestStat
 from app.models.entity import Entity, IncidentEntity
 from app.models.incident import Incident, IncidentComment
-from app.models.tenant import Tenant, TenantSla, WazuhConnection
+from app.models.tenant import Tenant, TenantCounter, TenantSla, WazuhConnection
 from app.models.user import StaffTenantAccess, User
 
 __all__ = [
@@ -17,6 +17,7 @@ __all__ = [
     "IngestStat",
     "StaffTenantAccess",
     "Tenant",
+    "TenantCounter",
     "TenantSla",
     "User",
     "WazuhConnection",

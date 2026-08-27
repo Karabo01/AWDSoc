@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     # Public origin of the console. Appears in the ingest URL handed to each
     # client's manager, so getting it wrong breaks onboarding, not the console.
-    console_base_url: str = "https://console.awdtech.co.za"
+    console_base_url: str = "https://soc.awdtech.co.za"
 
     database_url: str = "postgresql+asyncpg://awdsoc:awdsoc@localhost:5432/awdsoc"
     redis_url: str = "redis://localhost:6379/0"

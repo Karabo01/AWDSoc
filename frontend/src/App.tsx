@@ -7,6 +7,8 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDetail } from "@/routes/AlertDetail";
 import { Alerts } from "@/routes/Alerts";
+import { IncidentDetail } from "@/routes/IncidentDetail";
+import { Incidents } from "@/routes/Incidents";
 import { Login } from "@/routes/Login";
 import { Overview } from "@/routes/Overview";
 import { Placeholder } from "@/routes/Placeholder";
@@ -33,10 +35,8 @@ export function App() {
         }
       >
         <Route path="/" element={<Overview />} />
-        <Route
-          path="/incidents"
-          element={<Placeholder title="Incidents" milestone="M5" />}
-        />
+        <Route path="/incidents" element={<Incidents />} />
+        <Route path="/incidents/:tenant/:number" element={<IncidentDetail />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/alerts/:id" element={<AlertDetail />} />
         <Route
@@ -68,7 +68,7 @@ export function App() {
           path="/settings/audit"
           element={
             <RequireAuth roles={["platform_admin", "client_admin"]}>
-              <Placeholder title="Audit log" milestone="M5" />
+              <Placeholder title="Audit log" milestone="M8" />
             </RequireAuth>
           }
         />

@@ -2,7 +2,7 @@
 # Install the AWDTECH SOC Console integrator on a Wazuh manager.
 #
 #   sudo ./install.sh --slug acme-corp --secret <secret> \
-#        --url https://console.awdtech.co.za --level 7 [--group acme-corp]
+#        --url https://soc.awdtech.co.za --level 7 [--group acme-corp]
 #
 # --group is required on a SHARED manager and must match the tenant's agent
 # group. It is the only thing routing that client's alerts to that client's URL:

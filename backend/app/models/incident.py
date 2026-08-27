@@ -19,6 +19,7 @@ from app.db import Base
 
 INCIDENT_STATUSES = ("new", "active", "pending", "resolved", "false_positive")
 OPEN_STATUSES = ("new", "active", "pending")
+CLOSED_STATUSES = ("resolved", "false_positive")
 COMMENT_VISIBILITY = ("internal", "client")
 
 
