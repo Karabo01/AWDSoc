@@ -103,3 +103,40 @@ def test_the_health_target_never_carries_the_password():
     for target in (_postgres_target(), _redis_target()):
         assert "://" not in target
         assert "@" not in target or "unparseable" in target
+
+
+def test_health_says_whether_credentials_were_supplied():
+    """An AuthenticationError looks the same whether the password is wrong or
+    missing. The boolean separates them without leaking the secret."""
+    body = client.get("/api/healthz").json()
+    assert isinstance(body["redis"]["auth"], bool)
+    assert isinstance(body["postgres"]["auth"], bool)
+
+
+def test_the_target_never_leaks_the_password(monkeypatch):
+    from app.api.v1 import health
+    from app.config import settings
+
+    monkeypatch.setattr(
+        settings, "redis_url", "redis://default:sup3r-s3cret-value@somehost:6379/0"
+    )
+    monkeypatch.setattr(
+        settings,
+        "database_url",
+        "postgresql+asyncpg://u:an0ther-s3cret@somehost:5432/db",
+    )
+
+    assert "sup3r-s3cret-value" not in health._redis_target()
+    assert "an0ther-s3cret" not in health._postgres_target()
+    assert health._has_password(settings.redis_url, is_postgres=False) is True
+    assert health._has_password(settings.database_url, is_postgres=True) is True
+
+
+def test_a_url_without_a_password_is_reported_as_such(monkeypatch):
+    """This is the difference between "wrong password" and "no password", which
+    Redis reports identically."""
+    from app.api.v1 import health
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "redis_url", "redis://somehost:6379/0")
+    assert health._has_password(settings.redis_url, is_postgres=False) is False

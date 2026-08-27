@@ -39,6 +39,20 @@ def _redis_target() -> str:
         return "unparseable REDIS_URL"
 
 
+def _has_password(url: str, *, is_postgres: bool) -> bool:
+    """Whether the URL carries credentials at all - never what they are.
+
+    `AuthenticationError` looks identical whether the password is wrong or was
+    simply left out, and the two have different fixes.
+    """
+    try:
+        if is_postgres:
+            return bool(make_url(url).password)
+        return bool(urlsplit(url).password)
+    except Exception:  # noqa: BLE001 - diagnostics must never raise
+        return False
+
+
 async def _check_postgres() -> tuple[bool, str | None]:
     try:
         async with SessionLocal() as session:
@@ -78,8 +92,18 @@ async def healthz(response: Response) -> dict[str, Any]:
 
     return {
         "status": "ok" if healthy else "degraded",
-        "postgres": {"ok": pg_ok, "error": pg_err, "target": _postgres_target()},
-        "redis": {"ok": redis_ok, "error": redis_err, "target": _redis_target()},
+        "postgres": {
+            "ok": pg_ok,
+            "error": pg_err,
+            "target": _postgres_target(),
+            "auth": _has_password(settings.database_url, is_postgres=True),
+        },
+        "redis": {
+            "ok": redis_ok,
+            "error": redis_err,
+            "target": _redis_target(),
+            "auth": _has_password(settings.redis_url, is_postgres=False),
+        },
         "worker": {"alive": await _worker_alive()},
         # A growing depth with a live worker means the writer is behind; a
         # growing depth with no worker means alerts are buffering, not lost.
