@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -37,6 +38,31 @@ def _redis_target() -> str:
         return f"{parts.hostname}:{parts.port or 6379}"
     except Exception:  # noqa: BLE001
         return "unparseable REDIS_URL"
+
+
+async def _resolves(host: str | None) -> bool:
+    """Does this hostname exist on our network at all?
+
+    The single most useful bit of diagnosis here. A container that was recreated
+    gets a new name, and a URL pointing at the old one fails identically to a
+    wrong password once the error class is flattened. A boolean cannot leak
+    anything, unlike the exception text - and this endpoint is public.
+    """
+    if not host:
+        return False
+    try:
+        loop = asyncio.get_running_loop()
+        await loop.getaddrinfo(host, None)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _host_of(url: str, *, is_postgres: bool) -> str | None:
+    try:
+        return make_url(url).host if is_postgres else urlsplit(url).hostname
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _has_password(url: str, *, is_postgres: bool) -> bool:
@@ -97,12 +123,14 @@ async def healthz(response: Response) -> dict[str, Any]:
             "error": pg_err,
             "target": _postgres_target(),
             "auth": _has_password(settings.database_url, is_postgres=True),
+            "resolves": await _resolves(_host_of(settings.database_url, is_postgres=True)),
         },
         "redis": {
             "ok": redis_ok,
             "error": redis_err,
             "target": _redis_target(),
             "auth": _has_password(settings.redis_url, is_postgres=False),
+            "resolves": await _resolves(_host_of(settings.redis_url, is_postgres=False)),
         },
         "worker": {"alive": await _worker_alive()},
         # A growing depth with a live worker means the writer is behind; a

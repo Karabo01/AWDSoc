@@ -140,3 +140,29 @@ def test_a_url_without_a_password_is_reported_as_such(monkeypatch):
 
     monkeypatch.setattr(settings, "redis_url", "redis://somehost:6379/0")
     assert health._has_password(settings.redis_url, is_postgres=False) is False
+
+
+async def test_health_reports_whether_the_hostname_resolves():
+    """A recreated container gets a new name. A URL pointing at the old one
+    fails identically to a wrong password once the error class is flattened, so
+    the boolean is what separates them."""
+    from app.api.v1.health import _resolves
+
+    assert await _resolves("localhost") is True
+    assert await _resolves("a-container-that-does-not-exist.invalid") is False
+    assert await _resolves(None) is False
+
+
+def test_the_resolves_flag_is_present_for_both_services():
+    body = client.get("/api/healthz").json()
+    assert isinstance(body["postgres"]["resolves"], bool)
+    assert isinstance(body["redis"]["resolves"], bool)
+
+
+def test_health_exposes_no_credentials_anywhere_in_its_body():
+    """This endpoint is unauthenticated, so everything in it is world-readable."""
+    import json
+
+    body = json.dumps(client.get("/api/healthz").json()).lower()
+    for forbidden in ("password", "secret", "://"):
+        assert forbidden not in body
