@@ -465,6 +465,24 @@ One consequence worth knowing: each open queue tab holds one connection for its
 whole life. On the 4-core box that is fine for a SOC-sized team, but it is a
 real per-tab cost rather than a free one.
 
+## Client reports
+
+Migration `0006` adds the `reports` table. It is small and touches nothing on the
+ingest path, so the deploy is the usual `alembic upgrade head` on `api`.
+
+Two operational notes:
+
+**Reports hold their own copy of the figures.** The `payload` column is a frozen
+`jsonb` snapshot, deliberately, because `alerts` drops past
+`ALERT_RETENTION_DAYS` and a report regenerated after that would disagree with
+the one the client was sent. It also means the table grows independently of alert
+retention and should be included in whatever backs up the console database.
+
+**Nothing new to configure, and no mail is sent.** Delivery is an analyst
+pressing Print / Save as PDF. There is no SMTP anywhere in the stack, so no
+outbound mail credentials exist to leak — see the open decision in DESIGN.md §14
+before adding any.
+
 ## Moving to the production host later
 
 **Keep `soc.awdtech.co.za` pointed here now and take the name with you.** The

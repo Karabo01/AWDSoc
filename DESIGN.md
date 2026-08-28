@@ -592,6 +592,14 @@ POST   /tenants/{id}/test-connection     validates Manager API reachability
 GET    /tenants/{id}/sla                 severity bands and response targets
 PUT    /tenants/{id}/sla                 platform_admin; replaces the whole policy
 
+GET    /reports                          issued reports; staff also see drafts
+POST   /reports                          staff; generates and freezes a snapshot
+POST   /reports/preview                  staff; computes without saving
+GET    /reports/{id}
+PATCH  /reports/{id}                     title and covering note, drafts only
+POST   /reports/{id}/issue               one way; makes it visible to the client
+DELETE /reports/{id}                     platform_admin, drafts only
+
 GET    /audit                            platform_admin, or client_admin for own tenant
 POST   /admin/reprocess                  platform_admin; body {tenant_id?, from, to}
 ```
@@ -629,6 +637,8 @@ Enforce with a FastAPI dependency, not with checks scattered through handlers.
 /agents
 /agents/:id
 /coverage
+/reports                   client reports
+/reports/:id               the report, printable
 /settings/tenants          platform_admin
 /settings/users
 /settings/audit
@@ -821,6 +831,43 @@ Fork-per-alert caps sustained throughput in the low hundreds of alerts per secon
 
 ---
 
+## 11a. Client reports
+
+The one surface where data leaves for an audience that cannot see the console.
+Three properties follow, and each is enforced in `reports/builder.py` rather than
+trusted to a caller.
+
+**A report is a snapshot, not a query.** `alerts` is partitioned and dropped past
+`ALERT_RETENTION_DAYS`, so regenerating a March report in September produces
+different numbers than the one the client has. The payload is computed once and
+stored as `jsonb`, with a `schema` key inside it, and the read model types it as
+a bare dict — validating a two-year-old payload against today's model would fail
+on exactly the reports that matter most.
+
+**Tenancy comes from the token, and generation needs one tenant.** There is no
+`tenant_id` parameter; staff switch to the client and generate in their context,
+the same decision `/rules/{id}` makes. This keeps reports inside the invariant
+that `tests/test_app.py` enforces.
+
+**Internal comments never appear.** Only `visibility='client'` commentary is
+eligible, and it is counted rather than quoted. The analyst's covering note is
+the only prose in the document a person wrote.
+
+**Issuing is a one-way door.** A draft is working material and is invisible to
+the client; an issued report is what they received, is visible in their own
+console, and is never rewritten. A correction is a new report, which is what a
+paper process would do. `platform_admin` can delete a draft and nothing else.
+
+**A tenant with no SLA policy gets `configured: false`, not a section of zeroes.**
+Reporting "0 breaches" against a contract that does not exist reads to a paying
+client as perfect performance.
+
+Delivery is print-to-PDF today: `@media print` in `tokens.css` inverts the
+palette to ink on white and drops the console chrome. There is no SMTP in the
+system, so emailing is the analyst's own step — see the open question in §14.
+
+---
+
 ## 12. Build order
 
 Each milestone ends somewhere demonstrable. Do not start the next until the current one runs.
@@ -864,7 +911,7 @@ Each milestone ends somewhere demonstrable. Do not start the next until the curr
 
 ## 14. Open decisions
 
-All four are now resolved. Do not re-litigate.
+The original four are resolved. Do not re-litigate them. One new question is open, at the bottom.
 
 **Resolved earlier:** standalone product (not part of any existing platform); static egress IP available, so IP allowlisting with no VPN sidecar; AWDTECH MSSP, multi-tenant, public-facing; 90-day alert retention.
 
@@ -874,3 +921,26 @@ All four are now resolved. Do not re-litigate.
 2. **Client login — staff-only at launch.** Clients get reports; AWDTECH analysts use the console. The roles, `staff_tenant_access`, and comment visibility stay in the schema and are already built, so client access is additive work in v1.1. This removes nothing from M1.
 3. **Incident SLA — full, from M5, and the clock stops while awaiting client feedback.** Per-tenant contractual response and resolution targets by severity band in `tenant_slas`; deadlines stored on the incident as absolute timestamps and pushed forward on resume; `sla_paused_seconds` accumulated for reporting; breach derived, never stored; countdown in the queue. `pending` now means specifically *awaiting client feedback* — see §4 for the five clock rules, and for the one loose end this creates: there is no longer a waiting state whose clock keeps running, and adding one is a check-constraint migration best done before M5.
 4. **Console hostname — one shared domain for all clients.** Per-tenant subdomains buy nothing here: tenancy is carried in the token, so a subdomain adds wildcard TLS and per-tenant cookie scoping without adding isolation.
+
+**Open, raised 2026-08-28 — how a report actually reaches the client.**
+
+The report itself is built, frozen and printable, and an issued one is already
+visible to that client's users in their own console. But client login is
+staff-only at launch (decision 2), so today the delivery step is an analyst
+pressing **Print / Save as PDF** and attaching it to their own email. That works
+and is honest, but it is manual and leaves no record that a client was sent
+anything.
+
+Three ways out, in increasing cost:
+
+1. **Leave it manual.** The audit log records `report.issued`, which is the fact
+   that matters contractually. Zero new infrastructure and no secrets to hold.
+2. **Add SMTP.** A `report.emailed` action, delivery status on the report, and a
+   recipient list per tenant. This puts credentials for an outbound mail account
+   in the console and makes it a thing that can be used to send mail, which is a
+   meaningfully larger blast radius than it has now.
+3. **Wait for client login (v1.1).** The report is already there for them; the
+   notification is the only missing piece, and it needs the same SMTP anyway.
+
+Not decided. Option 1 is what ships. Nothing in the schema forecloses the others:
+`reports` has room for delivery columns and the payload is already frozen.

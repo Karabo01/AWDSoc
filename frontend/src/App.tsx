@@ -17,6 +17,8 @@ import { IncidentDetail } from "@/routes/IncidentDetail";
 import { Incidents } from "@/routes/Incidents";
 import { Login } from "@/routes/Login";
 import { Overview } from "@/routes/Overview";
+import { ReportView } from "@/routes/ReportView";
+import { Reports } from "@/routes/Reports";
 import { Tenants } from "@/routes/Tenants";
 import { Users } from "@/routes/Users";
 
@@ -52,6 +54,8 @@ export function App() {
         <Route path="/agents" element={<Agents />} />
         <Route path="/agents/:agentId" element={<AgentDetail />} />
         <Route path="/coverage" element={<Coverage />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/reports/:id" element={<ReportView />} />
         <Route
           path="/settings/tenants"
           element={

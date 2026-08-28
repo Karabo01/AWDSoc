@@ -12,6 +12,7 @@ from app.api.v1 import (
     ingest,
     ingest_status,
     overview,
+    reports,
     rules,
     stream,
     tenants,
@@ -36,6 +37,7 @@ api_router.include_router(agents.router)
 api_router.include_router(rules.router)
 api_router.include_router(coverage.router)
 api_router.include_router(overview.router)
+api_router.include_router(reports.router)
 api_router.include_router(users.router)
 api_router.include_router(audit_log.router)
 api_router.include_router(tenants.router)

@@ -4,6 +4,7 @@ import {
   Building2,
   ChevronLeft,
   FileClock,
+  FileText,
   Fingerprint,
   LayoutGrid,
   Menu,
@@ -42,6 +43,7 @@ const SECTIONS: NavSection[] = [
       { to: "/", label: "Overview", end: true, icon: LayoutGrid },
       { to: "/incidents", label: "Incidents", end: false, icon: AlertTriangle },
       { to: "/alerts", label: "Alerts", end: false, icon: Activity },
+      { to: "/reports", label: "Reports", end: false, icon: FileText },
     ],
   },
   {

@@ -55,3 +55,67 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Printing is how a report reaches a client today, so the report view is laid
+   out for paper rather than for the console it lives in. Chrome — nav, command
+   bars, buttons — is dropped, and the palette is inverted to ink on white:
+   printing the dark theme as-is empties a cartridge per report and is
+   unreadable across a meeting table. */
+@media print {
+  @page {
+    margin: 18mm 16mm;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto;
+    background: #fff;
+    color: #111;
+  }
+
+  /* Tokens are redefined rather than each element being overridden, so any
+     section added to the report later prints correctly without a matching rule
+     being remembered here. */
+  :root {
+    --ink-900: #fff;
+    --ink-800: #fff;
+    --ink-700: #f2f2f2;
+    --line: #c8ccd4;
+    --text: #111;
+    --text-dim: #555;
+    --accent: #7a5a12;
+    --sev-low: #555;
+    --sev-med: #8a6100;
+    --sev-high: #a34612;
+    --sev-crit: #a01028;
+    color-scheme: light;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+
+  .report-document {
+    max-width: none;
+    font-size: 10.5pt;
+  }
+
+  /* A section split across a page break reads as two half-sections. */
+  .report-section {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+}
